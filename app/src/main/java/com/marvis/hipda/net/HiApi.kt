@@ -371,6 +371,70 @@ object HiApi {
         }
     }
 
+    /** 抓报告表单页 */
+    fun reportSpec(url: String): com.marvis.hipda.model.ReportSpec {
+        val r = HiHttp.get(url, HiUrls.baseUrl)
+        return HiParser.parseReportSpec(Jsoup.parse(r.body, r.url), r.url)
+    }
+
+    fun reportSpecFromHtml(html: String, url: String) =
+        HiParser.parseReportSpec(Jsoup.parse(html, url), url)
+
+    /**
+     * 提交报告（举报）。整表隐藏域原样带回，再盖上理由与说明；
+     * 成功与否按站点返回的提示文字判断（Discuz 成功页是「感谢您的报告…」一类文案）。
+     */
+    fun submitReport(
+        spec: com.marvis.hipda.model.ReportSpec,
+        reason: String,
+        message: String
+    ): com.marvis.hipda.model.PostResult {
+        if (spec.formhash.isBlank()) return com.marvis.hipda.model.PostResult(false, "没取到 formhash，请重试")
+        if (reason.isBlank() && message.isBlank()) {
+            return com.marvis.hipda.model.PostResult(false, "请先选「推荐」或「举报」")
+        }
+        val fields = LinkedHashMap<String, String>(spec.hidden)
+        fields["formhash"] = spec.formhash
+        // 理由写在单选组字段（本站 name=type），意见写在多行框（本站 name=reason）
+        if (reason.isNotBlank()) fields[spec.reasonField] = reason
+        fields[spec.messageField] = message
+        // 提交按钮的 name/value，Discuz 用它识别「提交」而不是预览
+        fields["reportsubmit"] = "提交"
+        val action = spec.action.ifBlank { return com.marvis.hipda.model.PostResult(false, "表单地址缺失，请重试") }
+        return try {
+            val resp = HiHttp.post(action, fields, action)
+            val doc = Jsoup.parse(resp.body, action)
+            // 站点提示页会把「[ 点击这里返回上一页 ]」「如果浏览器没有自动跳转，请点此链接」
+            // 一起塞进提示块，客户端里点了没用，统一剔掉只留正文
+            fun clean(t: String) = t.replace(Regex("\\[\\s*点击这里返回上一页\\s*\\]"), "")
+                .replace(Regex("(如果|若)[^。！!]*?(自动跳转|没有跳转|无法跳转|没有反应)[^。！!]*[。！!]?"), "")
+                .replace(Regex("(请|可)?(点此|点击此)(链接|跳转)[。！!]?"), "")
+                .replace("4D4Y 提示信息", "")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+            val err = doc.select("div.alert_error").text().trim()
+                .ifBlank {
+                    Regex("id=\"ajaxerror\"[^>]*>(.*?)<", RegexOption.DOT_MATCHES_ALL)
+                        .find(resp.body)?.groupValues?.get(1)?.trim().orEmpty()
+                }
+            if (err.isNotBlank()) {
+                com.marvis.hipda.model.PostResult(false, clean(err))
+            } else {
+                // 成功页把站点原文（如「感谢您的报告，我们会尽快处理」）直接反馈给用户；
+                // 正文优先取 #messageleft，其余先摘掉跳转按钮块与链接再取文本
+                val okDoc = doc.clone()
+                okDoc.select("p.alert_btnleft, a").remove()
+                val body = doc.select("#messageleft").text().trim()
+                val okText = body.ifBlank {
+                    okDoc.select("div.alert_right, div.alert_info, div.fcontent").text().trim()
+                }
+                com.marvis.hipda.model.PostResult(true, clean(okText).ifBlank { "报告已提交" })
+            }
+        } catch (e: Exception) {
+            com.marvis.hipda.model.PostResult(false, "提交失败：" + (e.message ?: "网络异常"))
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────
     // 短消息回复 + 帖子预取
     // ────────────────────────────────────────────────────────────────

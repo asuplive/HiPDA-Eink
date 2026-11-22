@@ -10,10 +10,22 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 
-fun Context.dpD(value: Float): Int = (value * resources.displayMetrics.density + 0.5f).toInt()
+/**
+ * dp → px。统一乘上「框间距」缩放系数（设置里可调 50%~200%），
+ * 字号走 sp 由字号设置独立控制，两者互不干扰。
+ */
+fun Context.dpD(value: Float): Int {
+    if (value <= 0f) return 0
+    val px = value * resources.displayMetrics.density * Theme.gapScale + 0.5f
+    return px.toInt().coerceAtLeast(1)
+}
 
 /** View 内部（页面/自定义控件）同样可以直接用 dpD */
-fun View.dpD(value: Float): Int = (value * resources.displayMetrics.density + 0.5f).toInt()
+fun View.dpD(value: Float): Int {
+    if (value <= 0f) return 0
+    val px = value * resources.displayMetrics.density * Theme.gapScale + 0.5f
+    return px.toInt().coerceAtLeast(1)
+}
 
 /** 通用 UI 构造工具：页面全部用代码搭视图，保证主题切换后立即可用 */
 object Ui {
@@ -106,6 +118,15 @@ object Ui {
         val ll = LinearLayout(context)
         ll.orientation = LinearLayout.VERTICAL
         return ll
+    }
+
+    /**
+     * 列表行 / 设置行高度：随字号自适应，避免字号调大后被固定行高裁切；
+     * 下限 36dp 保证触控热区。
+     */
+    fun rowHeight(context: Context): Int {
+        val textPx = (Theme.bodySize * context.resources.displayMetrics.scaledDensity).toInt()
+        return maxOf(context.dpD(36f), textPx + context.dpD(16f))
     }
 
     fun weightParams(weight: Float): LinearLayout.LayoutParams =

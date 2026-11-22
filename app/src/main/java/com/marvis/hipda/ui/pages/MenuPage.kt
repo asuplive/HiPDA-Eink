@@ -312,7 +312,7 @@ class MenuPage(host: MainActivity) : ScrollPage(host) {
         ).apply { bottomMargin = dpD(7f) }
         wrapper.addView(
             row,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dpD(50f))
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.rowHeight(host))
         )
         row.isClickable = true
         row.setOnClickListener { action() }

@@ -130,6 +130,21 @@ object HiParser {
 
             val type = tbody.select("th em a").text().trim()
             val isNew = folderImg.contains("new")
+
+            // 特殊状态标注（与论坛列表里的一致）：置顶 / 精华 / 高亮 / 热。
+            // 站点没有独立的「状态字段」，置顶看 tbody id 与图钉图标，精华看 digest 图标，
+            // 高亮看标题被套了颜色（inline style 或 <font color>），热帖看 folder 图标。
+            val statuses = mutableListOf<String>()
+            if (sticky) statuses.add("置顶")
+            val iconText = (folderImg + " " + tbody.select("img").joinToString(" ") { it.attr("src") })
+                .lowercase()
+            if (iconText.contains("digest")) statuses.add("精华")
+            if (iconText.contains("hot")) statuses.add("热")
+            val titleStyle = (titleLink.attr("style") + " " +
+                (titleLink.parent()?.attr("style") ?: "")).lowercase()
+            if (titleStyle.contains("color") || titleLink.select("font[color]").isNotEmpty()) {
+                statuses.add("高亮")
+            }
             val title = titleLink.text().trim().ifBlank { titleLink.attr("title").trim() }
 
             items.add(
@@ -146,7 +161,8 @@ object HiParser {
                     viewCount = views,
                     sticky = sticky,
                     isNew = isNew,
-                    maxPage = maxPage
+                    maxPage = maxPage,
+                    statuses = statuses
                 )
             )
         }
@@ -406,6 +422,8 @@ object HiParser {
             hidden[name] = input.attr("value")
         }
         hidden["wysiwyg"] = "0"
+        // 引用回复时站点把被引用楼层的内容预填在 textarea 里，带出来才能原样显示
+        val messageText = form.select("textarea[name=message]").firstOrNull()?.text()?.trim().orEmpty()
         return FormSpec(
             action = action,
             formhash = formhash,
@@ -414,8 +432,100 @@ object HiParser {
             tid = tid,
             subject = subject,
             categories = categories,
-            hidden = hidden
+            hidden = hidden,
+            messageText = messageText
         ).apply { hint = url }
+    }
+
+    /**
+     * 报告（举报）表单规格。
+     *
+     * 站点实况（misc.php?action=report，已实测）：
+     *   form#postform → action=misc.php?action=report&reportsubmit=yes&infloat=yes
+     *   hidden：formhash / fid / tid / pid / handlekey=report
+     *   理由：radio 组 name=type（1=推荐 默认勾选、0=举报）
+     *   意见：textarea name=reason，上方 h4「我的意见」
+     *   reason 不是理由下拉，message 根本不存在 —— 按旧假设提交必然失败。
+     * 兼容分支：个别风格用 select[name=reason] 作理由下拉，一并支持。
+     */
+    fun parseReportSpec(doc: Document, url: String): com.marvis.hipda.model.ReportSpec {
+        val form = doc.select("form#postform").firstOrNull { it.attr("action").contains("report") }
+            ?: doc.select("form#reportform").firstOrNull()
+            ?: doc.select("form").firstOrNull { it.attr("action").contains("report", true) }
+            ?: doc.select("form").firstOrNull { it.select("input[name=formhash]").isNotEmpty() }
+        if (form == null) {
+            val message = doc.select("div.alert_error, div.alert_info, div.fcontent").text().trim()
+            return com.marvis.hipda.model.ReportSpec(
+                action = "", formhash = "", error = message.ifBlank { "没能打开报告页" }
+            )
+        }
+        val rawAction = form.attr("action").ifBlank { url }
+        val action = if (rawAction.startsWith("http")) rawAction else HiHttp.absolute(rawAction)
+
+        val hidden = LinkedHashMap<String, String>()
+        for (input in form.select("input[type=hidden]")) {
+            val name = input.attr("name")
+            if (name.isBlank()) continue
+            hidden[name] = input.attr("value")
+        }
+        val formhash = form.select("input[name=formhash]").attr("value").ifBlank {
+            hidden["formhash"].orEmpty()
+        }
+
+        // 理由控件：单选组优先（本站 name=type），没有单选再退回下拉
+        var reasonField = "type"
+        var defaultReason = ""
+        val reasons = mutableListOf<Pair<String, String>>()
+        val radioGroups = form.select("input[type=radio]").toList()
+            .filter { it.attr("name").isNotBlank() }
+            .groupBy { it.attr("name") }
+        if (radioGroups.isNotEmpty()) {
+            val picked = radioGroups.maxByOrNull { it.value.size }!!
+            reasonField = picked.key
+            for (r in picked.value) {
+                val v = r.attr("value").trim()
+                if (v.isBlank()) continue
+                val label = r.parent()?.text()?.trim().orEmpty()
+                    .ifBlank { r.attr("title").trim() }
+                    .ifBlank { v }
+                if (r.hasAttr("checked")) defaultReason = v
+                if (reasons.none { it.first == v }) reasons.add(v to label)
+            }
+        } else {
+            val select = form.select("select[name=reason]").firstOrNull()
+            if (select != null) {
+                reasonField = select.attr("name").ifBlank { "reason" }
+                for (opt in select.select("option")) {
+                    val v = opt.attr("value").trim()
+                    val t = opt.text().trim()
+                    if (t.isNotBlank()) {
+                        if (opt.hasAttr("selected")) defaultReason = v.ifBlank { t }
+                        reasons.add(v.ifBlank { t } to t)
+                    }
+                }
+            }
+        }
+
+        // 「我的意见」多行框：name=reason；找不到就取第一个 textarea
+        val area = form.select("textarea[name=reason]").firstOrNull() ?: form.select("textarea").firstOrNull()
+        val messageField = area?.attr("name")?.ifBlank { "reason" } ?: "reason"
+        val messageHint = area?.text()?.trim().orEmpty()
+        // 标题取 form 内 textarea 上方的 h4（本站写作「我的意见」）
+        val messageLabel = form.select("h4").text().trim()
+            .ifBlank { "我的意见" }
+            .substringBefore(" ")
+
+        return com.marvis.hipda.model.ReportSpec(
+            action = action,
+            formhash = formhash,
+            reasonField = reasonField,
+            messageField = messageField,
+            reasons = reasons,
+            hidden = hidden,
+            messageHint = messageHint,
+            defaultReason = defaultReason,
+            messageLabel = messageLabel
+        )
     }
 
     /**
@@ -538,16 +648,31 @@ object HiParser {
                 blocks = parseBlocks(contentEl)
             }
 
+            // 楼层左侧作者区（td.postauthor）：UID / 帖子数 / 积分 / 注册时间的排版在各模板里
+            // 有 dl-dt-dd、ul-li、纯文本行三种写法，这里统一按「标签+数字」取，不依赖具体标签。
+            val leftText = postEl.select("td.postauthor").firstOrNull()?.text().orEmpty()
+            val postCount = pickByLabel(leftText, "帖子", "(\\d{1,7})")
+            val credits = pickByLabel(leftText, "积分", "(\\d{1,9})")
+            val regTime = pickByLabel(leftText, "注册", "(\\d{4}-\\d{1,2}-\\d{1,2})")
+            val realUid = uid.ifBlank { pickByLabel(leftText, "UID", "(\\d{1,9})") }
+            // 个性签名：Discuz 7.2 放在正文之后 div.signatures 里
+            val signature = postEl.select("td.postcontent div.signatures, td.postcontent div.signature")
+                .firstOrNull()?.text()?.trim().orEmpty()
+
             posts.add(
                 PostItem(
                     postId = postId,
                     floor = floor,
                     author = author,
-                    uid = uid,
+                    uid = realUid,
                     time = time,
                     blocks = blocks,
                     op = floor == 1,
-                    notice = notice
+                    notice = notice,
+                    postCount = postCount,
+                    credits = credits,
+                    regTime = regTime,
+                    signature = signature
                 )
             )
         }
@@ -652,6 +777,16 @@ object HiParser {
      *    站点静态图没被过滤，会被当成正文图片渲染成一张铺满宽度的模糊小图 —— 正是
      *    「所有图片都是同一张模糊图片」的直接来源。凡是站点自身 /images/ 下的装饰图一律丢弃。
      */
+    /**
+     * 从一段纯文本里按标签取值：如「帖子: 1234」「帖子 1234」「帖子数 1234」都能取到 1234。
+     * 标签与数字之间只允许少量非数字字符，避免把相邻字段的数字也吃进来。
+     */
+    private fun pickByLabel(text: String, label: String, pattern: String): String {
+        if (text.isBlank()) return ""
+        val m = Regex(label + "[^0-9\\n]{0,6}" + pattern).find(text) ?: return ""
+        return m.groupValues[1].trim()
+    }
+
     private fun imageSrc(el: Element): String? {
         // zoomfile / file / data-original 通常就是原图，src 往往是降级缩略图，故按此顺序取第一个可用值
         for (attr in listOf("zoomfile", "file", "data-original", "src")) {

@@ -236,6 +236,40 @@ abstract class ScrollPage(host: MainActivity) : Page(host) {
         body.addView(view)
     }
 
+    /**
+     * 把某个子视图滚到屏幕顶部（提醒定位用）。
+     * 普通模式直接对齐该视图；墨水屏整屏模式向下取整到一个整屏边界，
+     * 保证目标行完整落在屏首，不会只露出半行。
+     */
+    protected fun scrollToView(target: View) {
+        scroller.post {
+            val y = yOf(target)
+            val p = pager
+            val dest = if (p != null) {
+                val s = p.height.coerceAtLeast(1)
+                ((y / s) * s).coerceAtMost(p.maxScroll())
+            } else {
+                y.coerceAtMost((body.height - scroller.height).coerceAtLeast(0))
+            }
+            scroller.scrollTo(0, dest.coerceAtLeast(0))
+            chrome()
+        }
+    }
+
+    /** 视图相对 body 顶部的纵坐标 */
+    private fun yOf(v: View): Int {
+        var y = 0
+        var cur: View? = v
+        var guard = 0
+        while (cur != null && cur !== body && guard < 12) {
+            y += cur.top
+            val parent = cur.parent
+            cur = if (parent is View) parent else null
+            guard++
+        }
+        return y
+    }
+
     /** 页面内的提示条（加载 / 错误 / Cloudflare） */
     protected fun noticeView(text: String, actionLabel: String? = null, action: (() -> Unit)? = null): LinearLayout {
         val wrapper = Ui.column(host)

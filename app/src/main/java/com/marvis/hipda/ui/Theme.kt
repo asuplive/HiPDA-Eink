@@ -33,6 +33,9 @@ object Theme {
     /** 红底上的文字色 */
     val alertFg: Int get() = if (dark) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
 
+    /** 框间距缩放系数：设置里的「框间距」百分比 / 100，作用到全站 dp 留白 */
+    val gapScale: Float get() = Prefs.gapScale / 100f
+
     val bodySize: Float get() = Prefs.fontSize.toFloat()
     val smallSize: Float get() = (Prefs.fontSize - 2).coerceAtLeast(10).toFloat()
     val titleSize: Float get() = (Prefs.fontSize + 1).toFloat()

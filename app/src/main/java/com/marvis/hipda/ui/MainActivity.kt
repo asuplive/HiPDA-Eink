@@ -174,11 +174,12 @@ class MainActivity : AppCompatActivity() {
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         )
 
-        // ── 右上角红色信封：只在有未读时出现（无未读时整只隐藏），窄一点，与左侧 Hi 方块同高
+        // ── 右上角红色信封：只在有未读时出现（无未读时整只隐藏）；点击区 26dp × 28dp 与左侧 Hi 方块齐平，
+        // 信封本身按扁宽比例居中绘制（比视图形矮），高度不抢视觉
         envelope = EnvelopeView(this)
         envelope.isClickable = true
         envelope.setOnClickListener { openMessages() }
-        topBar.addView(envelope, LinearLayout.LayoutParams(dpD(24f), dpD(28f)))
+        topBar.addView(envelope, LinearLayout.LayoutParams(dpD(26f), dpD(28f)))
 
         counterView = Ui.text(this, "", Theme.smallSize, Theme.muted, gravity = Gravity.END or Gravity.CENTER_VERTICAL)
         topBar.addView(counterView)

@@ -20,6 +20,16 @@ object HiUrls {
     fun threadDetail(tid: String, page: Int): String =
         baseUrl + "viewthread.php?tid=" + tid + "&page=" + page
 
+    /**
+     * 定位到某一楼。
+     * viewthread.php 带 pid 时站点会直接返回含该楼的那一页（并按 pid 高亮该楼），
+     * 这样不必自己算页码，翻到哪儿都能落到正确位置。
+     */
+    fun findPost(pid: String, tid: String): String {
+        val tail = if (tid.isBlank()) "" else "&tid=" + tid
+        return baseUrl + "viewthread.php?pid=" + pid + tail
+    }
+
     fun lastPage(tid: String): String =
         baseUrl + "redirect.php?goto=lastpost&from=fastpost&tid=" + tid
 
@@ -71,6 +81,21 @@ object HiUrls {
     /** 回帖提交 */
     fun replySubmit(fid: String, tid: String): String =
         baseUrl + "post.php?action=reply&fid=" + fid + "&tid=" + tid + "&replysubmit=yes"
+
+    /**
+     * 引用回复表单：repquote=yes + pid 让站点把被引用楼层的内容预填进 textarea[name=message]，
+     * 与论坛网页上点「引用」进入的是同一张表单（隐藏域也随之带上，提交不会丢引用关系）。
+     */
+    fun quoteReplyForm(fid: String, tid: String, pid: String): String {
+        val tail = if (fid.isBlank()) "" else "&fid=" + fid
+        return baseUrl + "post.php?action=reply&tid=" + tid + tail + "&repquote=yes&pid=" + pid
+    }
+
+    /** 举报（报告）页：站点自带的报告表单，必需参数是 tid + pid */
+    fun report(fid: String, tid: String, pid: String): String {
+        val tail = if (fid.isBlank()) "" else "&fid=" + fid
+        return baseUrl + "misc.php?action=report" + tail + "&tid=" + tid + "&pid=" + pid
+    }
 
     /** 发新帖提交 */
     fun newThreadSubmit(fid: String): String =

@@ -27,6 +27,10 @@ class PostEditorPage(
     private val tid: String,
     private val newThread: Boolean,
     private val replySubject: String = "",
+    /** 指定表单页地址：引用回复要走带 repquote 参数的地址，站点才会预填被引用内容 */
+    private val formUrlOverride: String = "",
+    /** 正文初始内容（表单本身没有预填时使用） */
+    private val initialMessage: String = "",
     /** 提交成功后回到哪个页面（一般是帖子详情页） */
     private val onPosted: (() -> Unit)? = null
 ) : ScrollPage(host) {
@@ -50,8 +54,11 @@ class PostEditorPage(
         loadSpec()
     }
 
-    private fun formUrl(): String =
-        if (newThread) HiUrls.newThreadForm(fid) else HiUrls.replyForm(fid, tid)
+    private fun formUrl(): String = when {
+        !newThread && formUrlOverride.isNotBlank() -> formUrlOverride
+        newThread -> HiUrls.newThreadForm(fid)
+        else -> HiUrls.replyForm(fid, tid)
+    }
 
     private fun loadSpec() {
         val url = formUrl()
@@ -65,6 +72,11 @@ class PostEditorPage(
                         statusText = if (s.error.isNotBlank()) s.error else ""
                         if (newThread && subjectInput.text.isBlank()) {
                             subjectInput.setText(replySubject)
+                        }
+                        // 预填优先级：调用方本地拼好的内容（引用块 / 楼层落款）> 站点 textarea 预填
+                        if (messageInput.text.isBlank()) {
+                            val prefill = initialMessage.ifBlank { if (newThread) "" else s.messageText }
+                            if (prefill.isNotBlank()) messageInput.setText(prefill)
                         }
                         render()
                     },

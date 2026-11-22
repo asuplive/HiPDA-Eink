@@ -13,7 +13,8 @@ import android.view.View
  * 形态约定（与左侧 "Hi" 方块同一视觉高度）：
  * 1) 只有一种形态：有未读 → 实心红信封；没有未读 → 整个视图 INVISIBLE，右上角什么都不画；
  * 2) 没有任何动效（墨水屏上跳动需要反复刷屏，且看着烦）；
- * 3) 视图本身比高度略窄（24dp × 28dp），与左侧 Hi 方块上下对齐，画出来的信封居中。
+ * 3) 视图本身是 26dp × 28dp 的点击区，画出来的信封是扁宽的（宽 : 高 ≈ 1.4 : 1），
+ *    纵向居中，与左侧 34dp × 28dp 的 Hi 方块齐平，不会显得竖长突兀。
  */
 class EnvelopeView(context: Context) : View(context) {
 
@@ -53,11 +54,11 @@ class EnvelopeView(context: Context) : View(context) {
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
 
-        // 信封外框：横向只留 1dp 呼吸位，纵向按 1.12 的竖长比居中，
-        // 这样图标本身就比高度窄一点，不会和左边 28dp 高的 Hi 方块抢视觉重量
+        // 信封外框：横向只留 1dp 呼吸位；纵向按 0.72 的扁宽比居中（宽 : 高 ≈ 1.4 : 1，
+        // 与常见信封比例一致），高度只有 28dp 点击区的六成左右，不会顶着 Hi 方块显竖长
         val side = dpD(1f).toFloat()
         val bodyW = w - side * 2f
-        var bodyH = bodyW * 1.12f
+        var bodyH = bodyW * 0.72f
         val maxH = h - dpD(2f)
         if (bodyH > maxH) bodyH = maxH
         val top = (h - bodyH) / 2f

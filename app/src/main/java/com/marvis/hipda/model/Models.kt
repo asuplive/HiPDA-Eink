@@ -22,7 +22,9 @@ data class ThreadItem(
     val viewCount: String = "",
     val sticky: Boolean = false,
     val isNew: Boolean = false,
-    val maxPage: Int = 1
+    val maxPage: Int = 1,
+    /** 特殊状态标注：置顶 / 精华 / 高亮 / 热 等，列表里以 [状态] 前缀显示（设置可关） */
+    val statuses: List<String> = emptyList()
 )
 
 data class ThreadPage(
@@ -49,7 +51,12 @@ data class PostItem(
     val time: String,
     val blocks: List<Block>,
     val op: Boolean = false,
-    val notice: String = ""
+    val notice: String = "",
+    /** 以下资料来自楼层左侧作者区，默认不显示，由「帖子设置」逐项控制 */
+    val postCount: String = "",
+    val credits: String = "",
+    val regTime: String = "",
+    val signature: String = ""
 )
 
 data class PostPage(
@@ -135,7 +142,9 @@ data class FormSpec(
     val categories: List<Pair<String, String>> = emptyList(),
     val error: String = "",
     /** 表单里的全部隐藏域（formhash / posttime / wysiwyg / notice* 等），提交时原样带回 */
-    val hidden: Map<String, String> = emptyMap()
+    val hidden: Map<String, String> = emptyMap(),
+    /** textarea[name=message] 的预填内容：引用回复时站点会把被引用楼层塞在这里 */
+    val messageText: String = ""
 ) {
     /** 表单地址里带 action=newthread 就是发新帖，否则是回帖 */
     val isNewThread: Boolean
@@ -145,6 +154,32 @@ data class FormSpec(
     /** 表单来源地址，用于判定发帖/回帖 */
     var hint: String = ""
 }
+
+/**
+ * 报告（举报）表单规格。Discuz 的报告页是独立的一张表单：
+ * form#reportform，含 select[name=reason]（举报理由下拉）+ textarea[name=message]（补充说明）+ formhash。
+ * 与发帖表单不同，它不认 posttime，也不能漏掉表单里的隐藏域，所以同样整表搬运。
+ */
+data class ReportSpec(
+    val action: String,
+    val formhash: String,
+    /**
+     * 理由控件的字段名。本站实际是单选组 name=type（1=推荐、0=举报），
+     * 不是 select[name=reason]；reason 反而是「我的意见」多行文本框。
+     */
+    val reasonField: String = "type",
+    /** 「我的意见」输入框的字段名，本站是 reason */
+    val messageField: String = "reason",
+    val reasons: List<Pair<String, String>> = emptyList(),
+    val hidden: Map<String, String> = emptyMap(),
+    val error: String = "",
+    /** 需要写进说明框的默认文字（站点通常预填「请填写举报原因」之类） */
+    val messageHint: String = "",
+    /** 站点默认勾选的理由值（value 字段，本站默认 1=推荐） */
+    val defaultReason: String = "",
+    /** 说明框上方的标题文字，站点里是 h4「我的意见」 */
+    val messageLabel: String = "我的意见"
+)
 
 /** 提交结果 */
 data class PostResult(val ok: Boolean, val message: String)
@@ -162,5 +197,9 @@ data class NoticeItem(
     val time: String = "",
     val tid: String = "",
     val pid: String = "",
-    val href: String = ""
+    val href: String = "",
+    /** 提醒原因：站点条目里的动作短语，如「回复了你发表的帖子」「被 4d4c 限时高亮」 */
+    val reason: String = "",
+    /** 被回复 / 被评论的那一段原文（列表里一行浅灰摘要，方便判断值不值得点开） */
+    val excerpt: String = ""
 )

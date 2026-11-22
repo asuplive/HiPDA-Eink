@@ -36,8 +36,13 @@ object Prefs {
 
     /** 正文字号，单位 sp */
     var fontSize: Int
-        get() = sp.getInt("font_size", 16)
-        set(value) = sp.edit().putInt("font_size", value.coerceIn(12, 26)).apply()
+        get() = sp.getInt("font_size", 16).coerceIn(10, 30)
+        set(value) = sp.edit().putInt("font_size", value.coerceIn(10, 30)).apply()
+
+    /** 框间距缩放百分比（50~200，100 为默认）：作用于全站 dp 留白 */
+    var gapScale: Int
+        get() = sp.getInt("gap_scale", 100).coerceIn(50, 200)
+        set(value) = sp.edit().putInt("gap_scale", value.coerceIn(50, 200)).apply()
 
     /** 是否显示帖子内图片（旧开关，保留兼容；新逻辑统一看 imageMode） */
     var showImages: Boolean
@@ -66,6 +71,45 @@ object Prefs {
         IMAGE_TAP -> "点击下载"
         else -> "不显示"
     }
+
+    // ────────────────────────────────────────────────────────────────
+    // 帖子设置：头像 / 帖子状态标注 / 作者资料（默认只有「帖子状态」开启）
+    // ────────────────────────────────────────────────────────────────
+
+    /** 是否显示用户头像：开启后板块列表与帖子详情都显示，默认关（墨水屏上省地方） */
+    var showAvatar: Boolean
+        get() = sp.getBoolean("post_avatar", false)
+        set(value) = sp.edit().putBoolean("post_avatar", value).apply()
+
+    /** 帖子状态标注：置顶 / 精华 / 高亮等，以 [状态] 前缀加粗显示，默认开 */
+    var showStatus: Boolean
+        get() = sp.getBoolean("post_status", true)
+        set(value) = sp.edit().putBoolean("post_status", value).apply()
+
+    /** 楼层作者 UID，默认关 */
+    var showUid: Boolean
+        get() = sp.getBoolean("post_uid", false)
+        set(value) = sp.edit().putBoolean("post_uid", value).apply()
+
+    /** 楼层作者帖子数，默认关 */
+    var showPostCount: Boolean
+        get() = sp.getBoolean("post_count", false)
+        set(value) = sp.edit().putBoolean("post_count", value).apply()
+
+    /** 楼层作者积分，默认关 */
+    var showCredits: Boolean
+        get() = sp.getBoolean("post_credits", false)
+        set(value) = sp.edit().putBoolean("post_credits", value).apply()
+
+    /** 楼层作者注册时间，默认关 */
+    var showRegTime: Boolean
+        get() = sp.getBoolean("post_regtime", false)
+        set(value) = sp.edit().putBoolean("post_regtime", value).apply()
+
+    /** 楼层个性签名，默认关 */
+    var showSignature: Boolean
+        get() = sp.getBoolean("post_signature", false)
+        set(value) = sp.edit().putBoolean("post_signature", value).apply()
 
     /** 每隔多少页做一次全刷（E-Ink 残影控制） */
     var fullRefreshPages: Int

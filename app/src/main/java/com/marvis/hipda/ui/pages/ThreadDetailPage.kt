@@ -24,7 +24,9 @@ import com.marvis.hipda.util.ImageLoader
 class ThreadDetailPage(
     host: MainActivity,
     private val tid: String,
-    private val fallbackTitle: String
+    private val fallbackTitle: String,
+    /** 从提醒进来时要定位的楼层 pid；空串表示普通打开 */
+    private val focusPid: String = ""
 ) : ScrollPage(host) {
 
     private var page = 1
@@ -35,6 +37,13 @@ class ThreadDetailPage(
     private var needVerify = false
     /** 分批渲染代次：重新载入后旧批次不能再往 body 加视图 */
     private var renderToken = 0
+
+    /** 待定位的楼层：载入到含该楼的那一页后清空，后续翻页不再跳 */
+    private var pendingFocus = focusPid
+    private var focusView: View? = null
+    private var focusScrolled = false
+    /** 站点也没给出含该楼的那页时，退回普通第一页，只退一次 */
+    private var focusMissed = false
 
     override val title: String
         get() = data?.title?.takeIf { it.isNotBlank() } ?: fallbackTitle
@@ -54,7 +63,9 @@ class ThreadDetailPage(
         body.addView(loadingView())
         chrome()
 
-        val url = HiUrls.threadDetail(tid, target)
+        // 有 pid 时走「定位」地址：站点直接返回含该楼的那一页，省去自己算页码
+        val jump = pendingFocus.isNotBlank()
+        val url = if (jump) HiUrls.findPost(pendingFocus, tid) else HiUrls.threadDetail(tid, target)
         loadHtml(
             url = url,
             forceRefresh = force,
@@ -66,7 +77,19 @@ class ThreadDetailPage(
                         data = result
                         page = result.page.coerceAtLeast(1)
                         lastPage = result.lastPage.coerceAtLeast(1)
+                        if (jump) {
+                            val hit = result.posts.any { it.postId == pendingFocus }
+                            if (hit) pendingFocus = ""
+                        }
+                        focusView = null
+                        focusScrolled = false
                         render()
+                        // 定位失败（站点没返回含该楼的页）：退回普通打开，别把用户留在半截页面
+                        if (jump && pendingFocus.isNotBlank() && !focusMissed) {
+                            focusMissed = true
+                            pendingFocus = ""
+                            load(1, force = true)
+                        }
                     },
                     onError = { t -> fail(t) }
                 )
@@ -111,11 +134,26 @@ class ThreadDetailPage(
         // 首屏先上两楼，其余分批补：一页 20 楼时一次性建出所有卡片要几十到上百毫秒，
         // 期间屏幕是空白的。先渲染 2 楼能立刻看到内容，剩余按 3 楼一批补齐。
         val token = ++renderToken
+        if (focusPid.isNotBlank() && current.posts.any { it.postId == focusPid }) {
+            body.addView(
+                Ui.text(host, "已定位到提醒里的那一楼", Theme.smallSize, Theme.muted)
+                    .apply { setPadding(0, 0, 0, dpD(8f)) }
+            )
+        }
         for (post in current.posts.take(2)) {
             body.addView(postView(post))
         }
         chrome()
+        maybeFocusScroll()
         appendRest(token, current.posts.drop(2), 0)
+    }
+
+    /** 定位楼层渲染出来后滚到屏首；只在首次生效，之后用户自己翻页 */
+    private fun maybeFocusScroll() {
+        if (focusScrolled) return
+        val v = focusView ?: return
+        focusScrolled = true
+        scrollToView(v)
     }
 
     /** 分批补齐剩余楼层；代次变化（重新载入 / 离开本页）后自动停止 */
@@ -128,6 +166,7 @@ class ThreadDetailPage(
         val end = (from + 3).coerceAtMost(rest.size)
         for (i in from until end) body.addView(postView(rest[i]))
         chrome()
+        maybeFocusScroll()
         if (end >= rest.size) appendFooter() else body.postDelayed({ appendRest(token, rest, end) }, 16L)
     }
 
@@ -158,7 +197,72 @@ class ThreadDetailPage(
     }
 
     /** 打开回帖编辑器（菜单页的「回帖」也走这里） */
-    fun startReply() {
+    fun startReply(post: PostItem? = null) {
+        if (!Prefs.isLoggedIn()) {
+            host.push(LoginPage(host))
+            return
+        }
+        val subject = data?.title?.takeIf { it.isNotBlank() } ?: fallbackTitle
+        // 针对某楼回复时，正文框首行标出楼号与作者，格式对齐站点里常见的
+        // 「回复 第 1 楼（ roc.wang ）」——括号内两侧留空格、行尾不跟冒号
+        val prefill = if (post == null) "" else (
+            "回复 第 " + post.floor + " 楼" +
+                (if (post.author.isNotBlank()) "（ " + post.author + " ）" else "") + "\n"
+            )
+        host.push(
+            PostEditorPage(
+                host = host,
+                fid = "",
+                tid = tid,
+                newThread = false,
+                replySubject = subject,
+                initialMessage = prefill,
+                onPosted = {
+                    host.pop()
+                    load(lastPage, force = true)
+                }
+            )
+        )
+    }
+
+    /** 长按楼层的菜单：报告 / 回复 / 引用（顺序与站点楼层里的功能按钮一致） */
+    private fun showPostMenu(post: PostItem) {
+        val items = arrayOf("报告", "回复", "引用")
+        android.app.AlertDialog.Builder(host)
+            .setTitle("第 " + post.floor + " 楼")
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> openReport(post)
+                    1 -> startReply(post)
+                    else -> startQuote(post)
+                }
+            }
+            .show()
+    }
+
+    /** 报告：站点自带的举报表单页（misc.php?action=report），在网页里选理由并提交 */
+    private fun openReport(post: PostItem) {
+        if (!Prefs.isLoggedIn()) {
+            host.push(LoginPage(host))
+            return
+        }
+        host.push(
+            ReportPage(
+                host = host,
+                fid = data?.fid.orEmpty(),
+                tid = tid,
+                floor = post.floor,
+                pid = post.postId,
+                author = post.author
+            )
+        )
+    }
+
+    /**
+     * 引用：本地拼好 [quote] 块（楼层编号 + 原文）直接塞进回复框。
+     * 不再依赖站点 repquote 参数预填（实测取不到，站内被 Cloudflare 拦下时会拿空表单）。
+     */
+    private fun startQuote(post: PostItem) {
         if (!Prefs.isLoggedIn()) {
             host.push(LoginPage(host))
             return
@@ -167,16 +271,44 @@ class ThreadDetailPage(
         host.push(
             PostEditorPage(
                 host = host,
-                fid = "",
+                fid = data?.fid.orEmpty(),
                 tid = tid,
                 newThread = false,
                 replySubject = subject,
+                initialMessage = quoteText(post),
                 onPosted = {
                     host.pop()
                     load(lastPage, force = true)
                 }
             )
         )
+    }
+
+    /** 楼层原文（纯文本拼装）：图片位置留一行 [图片] 提示，避免引用块里出现破图标签 */
+    private fun postText(post: PostItem): String {
+        val sb = StringBuilder()
+        for (b in post.blocks) {
+            when (b) {
+                is Block.Text -> sb.append(b.text.trim()).append("\n")
+                is Block.Quote -> sb.append("[quote]").append(b.text.trim()).append("[/quote]\n")
+                is Block.Link -> sb.append(b.text.trim()).append("\n")
+                is Block.Image -> sb.append("[图片]")
+            }
+        }
+        return sb.toString().trim()
+    }
+
+    /**
+     * 引用块对齐论坛网页版：原帖由 xxx 于 时间 发表 [指向该楼的链接，显示为「第 N 楼」]，
+     * 下面接原文。楼层编号与内容都落在回复框里，可再编辑。
+     */
+    private fun quoteText(post: PostItem): String {
+        val link = HiUrls.baseUrl + "viewthread.php?tid=" + tid + "&pid=" + post.postId + "#pid" + post.postId
+        val who = post.author.ifBlank { "匿名" }
+        val whenText = post.time.trim()
+        val head = "原帖由 " + who + (if (whenText.isNotBlank()) " 于 " + whenText else "") +
+            " 发表 [url=" + link + "]第 " + post.floor + " 楼[/url]"
+        return "[quote]" + head + "\n" + postText(post) + "\n[/quote]\n\n"
     }
 
     private fun postView(post: PostItem): View {
@@ -186,17 +318,37 @@ class ThreadDetailPage(
             ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { bottomMargin = dpD(10f) }
 
+        val focus = focusPid.isNotBlank() && post.postId == focusPid
+        if (focus) focusView = wrapper
+
         val card = Ui.column(host)
         card.background = Ui.card(host, stroke = true, fill = false)
 
         val head = Ui.row(host)
         head.setPadding(dpD(12f), dpD(9f), dpD(12f), dpD(7f))
+        // 头像：与列表同一开关（帖子设置 → 头像显示），默认关
+        if (Prefs.showAvatar && post.uid.isNotBlank()) {
+            val avatar = ImageView(host)
+            avatar.scaleType = ImageView.ScaleType.CENTER_CROP
+            val alp = LinearLayout.LayoutParams(dpD(24f), dpD(24f))
+            alp.rightMargin = dpD(8f)
+            head.addView(avatar, alp)
+            val url = HiUrls.avatarUrl(post.uid)
+            if (url.isNotBlank()) {
+                ImageLoader.load(url) { bmp -> if (bmp != null) avatar.setImageBitmap(bmp) }
+            }
+        }
         val author = Ui.text(host, post.author.ifBlank { "匿名" }, Theme.smallSize + 1, Theme.ink, bold = true)
         head.addView(author)
         if (post.op) {
             val gap = View(host)
             head.addView(gap, LinearLayout.LayoutParams(dpD(6f), 1))
             head.addView(Ui.badge(host, "楼主"))
+        }
+        if (focus) {
+            val gap = View(host)
+            head.addView(gap, LinearLayout.LayoutParams(dpD(6f), 1))
+            head.addView(Ui.badge(host, "提醒楼层"))
         }
         head.addView(Ui.spacer(host))
         val meta = Ui.text(
@@ -212,6 +364,31 @@ class ThreadDetailPage(
         head.addView(meta)
         card.addView(head)
 
+        // 作者资料：UID / 帖子数 / 积分 / 注册时间，四项各自独立开关，默认全不显示
+        val profileText = buildString {
+            if (Prefs.showUid && post.uid.isNotBlank()) {
+                if (isNotEmpty()) append("  ·  ")
+                append("UID ").append(post.uid)
+            }
+            if (Prefs.showPostCount && post.postCount.isNotBlank()) {
+                if (isNotEmpty()) append("  ·  ")
+                append("帖子 ").append(post.postCount)
+            }
+            if (Prefs.showCredits && post.credits.isNotBlank()) {
+                if (isNotEmpty()) append("  ·  ")
+                append("积分 ").append(post.credits)
+            }
+            if (Prefs.showRegTime && post.regTime.isNotBlank()) {
+                if (isNotEmpty()) append("  ·  ")
+                append("注册 ").append(post.regTime)
+            }
+        }
+        if (profileText.isNotBlank()) {
+            val pv = Ui.text(host, profileText, Theme.smallSize - 1, Theme.muted)
+            pv.setPadding(dpD(12f), 0, dpD(12f), dpD(6f))
+            card.addView(pv)
+        }
+
         card.addView(Ui.vsep(host, Theme.line, 1f))
 
         val contentCol = Ui.column(host)
@@ -223,9 +400,27 @@ class ThreadDetailPage(
             val bv = blockView(block) ?: continue
             contentCol.addView(bv)
         }
+        // 个性签名：站点放在正文之后的 div.signatures 里，默认不显示
+        if (Prefs.showSignature && post.signature.isNotBlank()) {
+            val sep = Ui.vsep(host, Theme.line, 1f)
+            val slp = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dpD(1f)
+            )
+            slp.topMargin = dpD(8f)
+            contentCol.addView(sep, slp)
+            val sv = Ui.text(host, "签名：" + post.signature, Theme.smallSize - 1, Theme.muted)
+            sv.setPadding(0, dpD(6f), 0, 0)
+            contentCol.addView(sv)
+        }
         card.addView(contentCol)
 
         wrapper.addView(card)
+        // 长按整张贴文卡片弹出「报告 / 回复 / 引用」，与论坛网页上的楼层功能一致
+        wrapper.isLongClickable = true
+        wrapper.setOnLongClickListener {
+            showPostMenu(post)
+            true
+        }
         return wrapper
     }
 
@@ -234,7 +429,8 @@ class ThreadDetailPage(
             is Block.Text -> {
                 val tv = Ui.text(host, block.text, Theme.bodySize, Theme.body)
                 tv.setPadding(0, dpD(2f), 0, dpD(4f))
-                tv.setTextIsSelectable(true)
+                // 不设 setTextIsSelectable：可选择的 TextView 会把长按吞掉去做选区，
+                // 长按菜单就永远弹不出来。需要复制的内容走「引用」进编辑器即可。
                 tv
             }
             is Block.Quote -> {

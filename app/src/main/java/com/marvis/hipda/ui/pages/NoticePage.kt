@@ -124,7 +124,7 @@ class NoticePage(
         val seen = MessageCenter.seenIds()
         val maxId = runCatching { Prefs.msgMaxId }.getOrDefault(0L)
         for (item in items) {
-            body.addView(itemCard(item, item.id !in seen && abs(item.id) > abs(maxId)))
+            body.addView(itemCard(item, isUnread(item, seen, maxId)))
         }
 
         val tail = Ui.text(host, "共 " + items.size + " 条", Theme.smallSize - 1, Theme.muted, gravity = Gravity.CENTER)
@@ -137,6 +137,19 @@ class NoticePage(
         needLogin -> "去登录"
         needVerify -> "去完成验证"
         else -> "重新载入"
+    }
+
+    /**
+     * 未读判定。
+     * 见过的 ID 一律算已读；没见过的，帖子类再看 pid 是否大于上次见到的最大值。
+     * 系统类提醒的 ID 是「主题+原因+时间」合成出来的，量级与 pid 差一个数量级，
+     * 混在一起比较会让新提醒被老的合成 ID 永久压成已读，所以分开判断。
+     */
+    private fun isUnread(item: NoticeItem, seen: Set<Long>, maxId: Long): Boolean {
+        if (item.id in seen) return false
+        if (item.pid.isBlank()) return true
+        val lastThread = if (maxId in 1L until 0x40000000L) maxId else 0L
+        return item.id > lastThread
     }
 
     /** 顶部入口行：短消息入口 + 三个频道切换 + 全部标为已读 */
@@ -197,7 +210,7 @@ class NoticePage(
 
     private fun hintOf(kind: Int): String = when (kind) {
         NoticeApi.KIND_THREAD -> "有人回复你的帖子或 @ 你时会出现在这里。"
-        NoticeApi.KIND_SYSTEM -> "系统通知与公告会出现在这里。"
+        NoticeApi.KIND_SYSTEM -> "评分、高亮、置顶等管理通知会出现在这里，原因已标在每条下面。"
         else -> "好友动态会出现在这里。"
     }
 
@@ -233,16 +246,41 @@ class NoticePage(
         titleView.ellipsize = android.text.TextUtils.TruncateAt.END
         col.addView(titleView)
 
+        // 原因行：谁回复了你 / 被谁高亮 / 威望加了多少，一眼看清这条提醒为什么来
+        val reason = item.reason.ifBlank {
+            item.kindAndFallback()
+        }
+        if (reason.isNotBlank()) {
+            val reasonView = Ui.text(host, reason, Theme.smallSize, Theme.secondary)
+            reasonView.maxLines = 2
+            reasonView.ellipsize = android.text.TextUtils.TruncateAt.END
+            reasonView.setPadding(0, dpD(4f), 0, 0)
+            col.addView(reasonView)
+        }
+
+        if (item.excerpt.isNotBlank()) {
+            val excerptView = Ui.text(host, "「" + item.excerpt + "」", Theme.smallSize - 1, Theme.muted)
+            excerptView.maxLines = 2
+            excerptView.ellipsize = android.text.TextUtils.TruncateAt.END
+            excerptView.setPadding(0, dpD(3f), 0, 0)
+            col.addView(excerptView)
+        }
+
         val meta = buildString {
-            if (item.from.isNotBlank()) append("来自 ").append(item.from)
+            // 原因里已经写了「谁」，这里就不再重复一遍来源
+            if (item.from.isNotBlank() && !reason.contains(item.from)) append("来自 ").append(item.from)
             if (item.time.isNotBlank()) {
                 if (isNotEmpty()) append("　·　")
                 append(item.time)
             }
+            if (item.tid.isNotBlank() || item.pid.isNotBlank()) {
+                if (isNotEmpty()) append("　·　")
+                append(if (item.pid.isNotBlank()) "点击定位到楼层" else "点击进入帖子")
+            }
             if (isEmpty()) append(if (unread) "未读" else "已读")
         }
         val metaView = Ui.text(host, meta, Theme.smallSize - 1, Theme.muted)
-        metaView.setPadding(0, dpD(4f), 0, 0)
+        metaView.setPadding(0, dpD(5f), 0, 0)
         col.addView(metaView)
         row.addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
 
@@ -251,6 +289,18 @@ class NoticePage(
         return row
     }
 
+    /** 解析没拿到原因时的兜底话术，避免卡片上空一块 */
+    private fun NoticeItem.kindAndFallback(): String = when (kind) {
+        NoticeApi.KIND_THREAD -> if (from.isNotBlank()) from + " 回复了帖子" else "帖子有新回复"
+        NoticeApi.KIND_SYSTEM -> "系统提醒"
+        else -> "好友动态"
+    }
+
+    /**
+     * 打开一条提醒。
+     * 带 pid 的（有人回复某楼）直接按 pid 定位到那一楼；只有 tid 的进帖子首页；
+     * 两者都没有的（纯公告）走 WebView。
+     */
     private fun open(item: NoticeItem) {
         try {
             MessageCenter.markSeen(listOf(item.id))
@@ -260,7 +310,7 @@ class NoticePage(
         runCatching { render() }
         val fallback = item.title.ifBlank { "提醒" }
         if (item.tid.isNotBlank()) {
-            host.push(ThreadDetailPage(host, item.tid, fallback))
+            host.push(ThreadDetailPage(host, item.tid, fallback, item.pid))
             return
         }
         if (item.href.isNotBlank()) {

@@ -5,6 +5,7 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.SeekBar
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import com.marvis.hipda.data.Prefs
@@ -20,7 +21,6 @@ class SettingsPage(host: MainActivity) : ScrollPage(host) {
 
     override val title: String = "设置"
 
-    private val fontSizes = listOf(14, 16, 18, 20, 22)
     private val refreshOptions = listOf(0, 4, 8, 12, 16)
 
     init {
@@ -41,9 +41,14 @@ class SettingsPage(host: MainActivity) : ScrollPage(host) {
             Prefs.darkMode = !Prefs.darkMode
             host.applyThemeChange()
         })
-        body.addView(row("字号", Prefs.fontSize.toString() + " sp") {
-            cycleFontSize()
-        })
+        body.addView(row("字号", Prefs.fontSize.toString() + " sp") { pickFontSize() })
+        body.addView(row("框间距", Prefs.gapScale.toString() + "%") { pickGapScale() })
+        body.addView(
+            hint(
+                "字号可 10~30 sp 任意取整；框间距按 50%~200% 缩放卡片与列表行的留白，100% 为默认。\n" +
+                    "两项互不影响：字号只改文字大小，框间距只改框内外留白。"
+            )
+        )
         body.addView(row("字体", if (Prefs.serifFont) "宋体" else "黑体") {
             Prefs.serifFont = !Prefs.serifFont
             host.applyThemeChange()
@@ -57,6 +62,61 @@ class SettingsPage(host: MainActivity) : ScrollPage(host) {
                 "自动下载：进帖即加载全部图片（流量大、翻页稍慢）。\n" +
                     "点击下载：图片位置显示占位，点一下才下载（推荐，省流量、开帖更快）。\n" +
                     "不显示：只保留一行图注，完全不下载图片。"
+            )
+        )
+
+        body.addView(sectionLabel("帖子设置"))
+        body.addView(row("头像显示", if (Prefs.showAvatar) "开" else "关") {
+            Prefs.showAvatar = !Prefs.showAvatar
+            render()
+            chrome()
+        })
+        body.addView(
+            hint(
+                "默认关闭。开启后板块列表与帖子详情的作者区都显示头像；" +
+                    "关闭时不占地方，列表一屏能多看几行。"
+            )
+        )
+        body.addView(row("帖子状态标注", if (Prefs.showStatus) "开" else "关") {
+            Prefs.showStatus = !Prefs.showStatus
+            render()
+            chrome()
+        })
+        body.addView(
+            hint(
+                "默认开启。带特殊状态的帖子在列表里加粗，并在标题前用 [置顶] [精华] [高亮] [热] 标注，" +
+                    "与论坛网页上的标记一致。关闭后列表只按普通样式显示。"
+            )
+        )
+        body.addView(row("显示 UID", if (Prefs.showUid) "开" else "关") {
+            Prefs.showUid = !Prefs.showUid
+            render()
+            chrome()
+        })
+        body.addView(row("显示帖子数量", if (Prefs.showPostCount) "开" else "关") {
+            Prefs.showPostCount = !Prefs.showPostCount
+            render()
+            chrome()
+        })
+        body.addView(row("显示积分", if (Prefs.showCredits) "开" else "关") {
+            Prefs.showCredits = !Prefs.showCredits
+            render()
+            chrome()
+        })
+        body.addView(row("显示注册时间", if (Prefs.showRegTime) "开" else "关") {
+            Prefs.showRegTime = !Prefs.showRegTime
+            render()
+            chrome()
+        })
+        body.addView(row("显示个性签名", if (Prefs.showSignature) "开" else "关") {
+            Prefs.showSignature = !Prefs.showSignature
+            render()
+            chrome()
+        })
+        body.addView(
+            hint(
+                "以上五项默认全部关闭，开启后在每层楼的作者名下方显示 UID / 帖子数 / 积分 / 注册时间，" +
+                    "个性签名显示在正文末尾。"
             )
         )
 
@@ -106,12 +166,70 @@ class SettingsPage(host: MainActivity) : ScrollPage(host) {
         body.addView(hint("界面参考 HiPDA·E-INK 设计稿，内容解析参考 GreenSkinMonster/hipda 开源项目。"))
     }
 
-    private fun cycleFontSize() {
-        val current = Prefs.fontSize
-        val index = fontSizes.indexOf(current)
-        val next = fontSizes[(index + 1).mod(fontSizes.size)]
-        Prefs.fontSize = next
-        host.applyThemeChange()
+    /** 字号：滑杆 10~30 sp 任意取整 */
+    private fun pickFontSize() {
+        pickValue("字号", 10, 30, 1, Prefs.fontSize, { v -> v.toString() + " sp" }) { v ->
+            Prefs.fontSize = v
+            render()
+            chrome()
+        }
+    }
+
+    /** 框间距：滑杆 50%~200%，步长 5% */
+    private fun pickGapScale() {
+        pickValue("框间距", 50, 200, 5, Prefs.gapScale, { v -> v.toString() + "%" }) { v ->
+            Prefs.gapScale = v
+            render()
+            chrome()
+        }
+    }
+
+    /** 通用数值滑杆对话框：实时显示当前值，确定后回调 */
+    private fun pickValue(
+        title: String,
+        min: Int,
+        max: Int,
+        step: Int,
+        current: Int,
+        label: (Int) -> String,
+        onPick: (Int) -> Unit
+    ) {
+        val box = LinearLayout(host)
+        box.orientation = LinearLayout.VERTICAL
+        val padH = dpD(16f)
+        box.setPadding(padH, dpD(10f), padH, dpD(2f))
+
+        val valueView = Ui.text(
+            host, label(current), Theme.bodySize + 4f, Theme.ink,
+            bold = true, gravity = Gravity.CENTER
+        )
+        box.addView(valueView)
+
+        val bar = SeekBar(host)
+        bar.max = (max - min) / step
+        bar.progress = ((current - min) / step).coerceIn(0, bar.max)
+        bar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                valueView.text = label(min + progress * step)
+            }
+
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+        box.addView(
+            bar,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dpD(6f) }
+        )
+
+        AlertDialog.Builder(host)
+            .setTitle(title)
+            .setView(box)
+            .setPositiveButton("确定") { _, _ -> onPick(min + bar.progress * step) }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun cycleRefresh() {
@@ -230,7 +348,7 @@ class SettingsPage(host: MainActivity) : ScrollPage(host) {
         ).apply { bottomMargin = dpD(7f) }
         wrapper.addView(
             holder,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dpD(50f))
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.rowHeight(host))
         )
         holder.isClickable = true
         holder.setOnClickListener { action() }

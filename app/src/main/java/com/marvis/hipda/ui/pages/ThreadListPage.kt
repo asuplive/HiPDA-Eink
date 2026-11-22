@@ -2,6 +2,7 @@ package com.marvis.hipda.ui.pages
 
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
 import com.marvis.hipda.data.Prefs
 import com.marvis.hipda.model.ThreadItem
@@ -14,6 +15,7 @@ import com.marvis.hipda.ui.Theme
 import com.marvis.hipda.ui.Ui
 import com.marvis.hipda.ui.dpD
 import com.marvis.hipda.util.Async
+import com.marvis.hipda.util.ImageLoader
 import com.marvis.hipda.util.Prefetch
 
 /** 版块帖子列表 */
@@ -208,14 +210,27 @@ class ThreadListPage(
         row.setPadding(dpD(12f), dpD(8f), dpD(12f), dpD(8f))
 
         val titleRow = Ui.row(host)
-        if (item.sticky) {
-            titleRow.addView(Ui.badge(host, "置顶"))
-            val g = View(host)
-            titleRow.addView(g, LinearLayout.LayoutParams(dpD(6f), 1))
+        // 头像：仅在「帖子设置 → 头像显示」开启时出现，列表与帖子详情保持一致
+        if (Prefs.showAvatar && item.authorId.isNotBlank()) {
+            val avatar = ImageView(host)
+            avatar.scaleType = ImageView.ScaleType.CENTER_CROP
+            val lp = LinearLayout.LayoutParams(dpD(20f), dpD(20f))
+            lp.rightMargin = dpD(6f)
+            titleRow.addView(avatar, lp)
+            val url = HiUrls.avatarUrl(item.authorId)
+            if (url.isNotBlank()) {
+                ImageLoader.load(url) { bmp -> if (bmp != null) avatar.setImageBitmap(bmp) }
+            }
+        }
+        // 特殊状态：加粗 + [状态] 前缀（置顶 / 精华 / 高亮 / 热），可在设置里关掉
+        val statusPrefix = if (Prefs.showStatus && item.statuses.isNotEmpty()) {
+            item.statuses.joinToString("") { "[" + it + "]" }
+        } else {
+            ""
         }
         val titleView = Ui.text(
             host,
-            item.title,
+            statusPrefix + item.title,
             Theme.bodySize + 0.5f,
             if (item.sticky) Theme.ink else Theme.body,
             bold = true
