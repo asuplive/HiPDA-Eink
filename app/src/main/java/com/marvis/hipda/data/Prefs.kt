@@ -44,6 +44,11 @@ object Prefs {
         get() = sp.getInt("gap_scale", 100).coerceIn(50, 200)
         set(value) = sp.edit().putInt("gap_scale", value.coerceIn(50, 200)).apply()
 
+    /** 行间距缩放百分比（60~250，100 为默认）：只作用于多行文字的行间留白，不影响字号与框间距 */
+    var lineSpacing: Int
+        get() = sp.getInt("line_spacing", 100).coerceIn(60, 250)
+        set(value) = sp.edit().putInt("line_spacing", value.coerceIn(60, 250)).apply()
+
     /** 是否显示帖子内图片（旧开关，保留兼容；新逻辑统一看 imageMode） */
     var showImages: Boolean
         get() = imageMode == IMAGE_AUTO
@@ -190,6 +195,33 @@ object Prefs {
     var keyNextCode: Int
         get() = sp.getInt("key_next_code", 25) // KEYCODE_VOLUME_DOWN
         set(value) = sp.edit().putInt("key_next_code", value).apply()
+
+    // ────────────────────────────────────────────────────────────────
+    // 底部导航栏（E-Ink 模式）：上屏 / 下屏 / 返回 三个按钮，可单独隐藏
+    // ────────────────────────────────────────────────────────────────
+
+    /** 底部栏是否显示「上屏」按钮 */
+    var navPrevVisible: Boolean
+        get() = sp.getBoolean("nav_prev_visible", true)
+        set(value) = sp.edit().putBoolean("nav_prev_visible", value).apply()
+
+    /** 底部栏是否显示「下屏」按钮 */
+    var navNextVisible: Boolean
+        get() = sp.getBoolean("nav_next_visible", true)
+        set(value) = sp.edit().putBoolean("nav_next_visible", value).apply()
+
+    /** 底部栏是否显示「返回」按钮 */
+    var navBackVisible: Boolean
+        get() = sp.getBoolean("nav_back_visible", true)
+        set(value) = sp.edit().putBoolean("nav_back_visible", value).apply()
+
+    /**
+     * 左右手习惯：false = 右手（上屏、下屏、返回），
+     * true = 左手（整排镜像：返回、下屏、上屏）。
+     */
+    var leftHanded: Boolean
+        get() = sp.getBoolean("left_handed", false)
+        set(value) = sp.edit().putBoolean("left_handed", value).apply()
 
     /** 站点首页解析出的板块清单缓存（JSON），保证板块跟站点一致 */
     var forumIndexJson: String

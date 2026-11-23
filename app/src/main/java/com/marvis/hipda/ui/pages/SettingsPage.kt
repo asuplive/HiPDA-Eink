@@ -43,10 +43,12 @@ class SettingsPage(host: MainActivity) : ScrollPage(host) {
         })
         body.addView(row("字号", Prefs.fontSize.toString() + " sp") { pickFontSize() })
         body.addView(row("框间距", Prefs.gapScale.toString() + "%") { pickGapScale() })
+        body.addView(row("行间距", Prefs.lineSpacing.toString() + "%") { pickLineSpacing() })
         body.addView(
             hint(
-                "字号可 10~30 sp 任意取整；框间距按 50%~200% 缩放卡片与列表行的留白，100% 为默认。\n" +
-                    "两项互不影响：字号只改文字大小，框间距只改框内外留白。"
+                "字号可 10~30 sp 任意取整；框间距按 50%~200% 缩放卡片与列表行的留白；" +
+                    "行间距按 60%~250% 缩放多行文字之间的行距，100% 为各自默认值。\n" +
+                    "三项互不影响：字号只改文字大小，框间距只改框内外留白，行间距只改文字行与行的距离。"
             )
         )
         body.addView(row("字体", if (Prefs.serifFont) "宋体" else "黑体") {
@@ -145,6 +147,39 @@ class SettingsPage(host: MainActivity) : ScrollPage(host) {
         })
         body.addView(hint("模拟墨水屏残影治理：连续翻屏达到设定次数后插入一次整屏刷新。设为关则不闪。"))
 
+        body.addView(sectionLabel("底部按钮"))
+        body.addView(row("上屏按钮", if (Prefs.navPrevVisible) "显示" else "隐藏") {
+            Prefs.navPrevVisible = !Prefs.navPrevVisible
+            host.refreshBottomBar()
+            render()
+            chrome()
+        })
+        body.addView(row("下屏按钮", if (Prefs.navNextVisible) "显示" else "隐藏") {
+            Prefs.navNextVisible = !Prefs.navNextVisible
+            host.refreshBottomBar()
+            render()
+            chrome()
+        })
+        body.addView(row("返回按钮", if (Prefs.navBackVisible) "显示" else "隐藏") {
+            Prefs.navBackVisible = !Prefs.navBackVisible
+            host.refreshBottomBar()
+            render()
+            chrome()
+        })
+        body.addView(row("左右手习惯", if (Prefs.leftHanded) "左手" else "右手") {
+            Prefs.leftHanded = !Prefs.leftHanded
+            host.refreshBottomBar()
+            render()
+            chrome()
+        })
+        body.addView(
+            hint(
+                "上屏 / 下屏 / 返回三个按钮可各自隐藏或显示，隐藏后空出的位置自动分给剩下的按钮。\n" +
+                    "符号统一为小三角：上屏用 ◂，下屏用 ▸，返回用 ▴，与墨水屏极简黑白风格一致。\n" +
+                    "右手（默认）顺序：上屏、下屏、返回；左手顺序整排镜像：返回、下屏、上屏。"
+            )
+        )
+
         body.addView(sectionLabel("网络"))
         body.addView(row("Cloudflare 验证", if (HiHttp.cookies.hasCookie("cf_clearance")) "已通过" else "未验证") {
             host.startCloudflareCheck()
@@ -179,6 +214,16 @@ class SettingsPage(host: MainActivity) : ScrollPage(host) {
     private fun pickGapScale() {
         pickValue("框间距", 50, 200, 5, Prefs.gapScale, { v -> v.toString() + "%" }) { v ->
             Prefs.gapScale = v
+            render()
+            chrome()
+        }
+    }
+
+    /** 行间距：滑杆 60%~250%，步长 5%；确定后立即刷新已建页面，无需重进 */
+    private fun pickLineSpacing() {
+        pickValue("行间距", 60, 250, 5, Prefs.lineSpacing, { v -> v.toString() + "%" }) { v ->
+            Prefs.lineSpacing = v
+            host.refreshLineSpacingNow()
             render()
             chrome()
         }

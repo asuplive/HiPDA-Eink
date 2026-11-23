@@ -27,8 +27,18 @@ fun View.dpD(value: Float): Int {
     return px.toInt().coerceAtLeast(1)
 }
 
+/**
+ * 行间额外留白（px）：基准 3dp，只随设置里的「行间距」百分比缩放，
+ * 不乘框间距系数，保证字号 / 框间距 / 行间距三个设置互不牵连。
+ */
+fun Context.lineGap(): Float =
+    (3f * resources.displayMetrics.density * Theme.lineScale).coerceAtLeast(0f)
+
 /** 通用 UI 构造工具：页面全部用代码搭视图，保证主题切换后立即可用 */
 object Ui {
+
+    /** 由 text() 创建、需要跟随行间距设置刷新的文本标记（按引用比对，不复用给其他用途） */
+    private val LINE_MARK = FloatArray(0)
 
     fun text(
         context: Context,
@@ -45,8 +55,22 @@ object Ui {
         tv.gravity = gravity
         tv.typeface = if (bold) Theme.titleTypeface() else Theme.bodyTypeface()
         tv.includeFontPadding = false
-        tv.setLineSpacing(context.dpD(3f).toFloat(), 1f)
+        tv.setLineSpacing(context.lineGap(), 1f)
+        tv.tag = LINE_MARK
         return tv
+    }
+
+    /** 行间距设置改动后，原地刷新已建好的页面文本，不必重建界面 */
+    fun applyLineSpacing(root: View) {
+        val gap = root.context.lineGap()
+        fun walk(v: View) {
+            if (v is TextView) {
+                if (v.tag === LINE_MARK) v.setLineSpacing(gap, 1f)
+            } else if (v is ViewGroup) {
+                for (i in 0 until v.childCount) walk(v.getChildAt(i))
+            }
+        }
+        walk(root)
     }
 
     fun vsep(context: Context, color: Int = Theme.line, heightDp: Float = 1f): View {

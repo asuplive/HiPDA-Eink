@@ -36,6 +36,9 @@ object Theme {
     /** 框间距缩放系数：设置里的「框间距」百分比 / 100，作用到全站 dp 留白 */
     val gapScale: Float get() = Prefs.gapScale / 100f
 
+    /** 行间距缩放系数：设置里的「行间距」百分比 / 100，单独作用到多行文字的行间留白 */
+    val lineScale: Float get() = Prefs.lineSpacing / 100f
+
     val bodySize: Float get() = Prefs.fontSize.toFloat()
     val smallSize: Float get() = (Prefs.fontSize - 2).coerceAtLeast(10).toFloat()
     val titleSize: Float get() = (Prefs.fontSize + 1).toFloat()

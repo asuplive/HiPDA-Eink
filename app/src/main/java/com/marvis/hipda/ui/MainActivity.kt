@@ -45,8 +45,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var counterView: TextView
     private lateinit var contentHost: FrameLayout
     private lateinit var bottomBar: LinearLayout
+    private lateinit var bottomSep: View
     private lateinit var prevBtn: TextView
     private lateinit var nextBtn: TextView
+    private lateinit var backBtn: TextView
     private lateinit var pageBtn: TextView
     private lateinit var column: LinearLayout
     private lateinit var rootFrame: FrameLayout
@@ -194,14 +196,15 @@ class MainActivity : AppCompatActivity() {
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
         )
 
-        // ── 底部翻页栏（E-Ink 模式专用）
-        val bottomSep = Ui.vsep(this, Theme.line)
+        // ── 底部导航栏（E-Ink 模式专用）：上屏 / 下屏 / 返回 三个按钮，可单独隐藏；
+        //    左手习惯时整排镜像为 返回 / 下屏 / 上屏
+        bottomSep = Ui.vsep(this, Theme.line)
         bottomBar = LinearLayout(this)
         bottomBar.orientation = LinearLayout.HORIZONTAL
         bottomBar.gravity = Gravity.CENTER_VERTICAL
         bottomBar.setBackgroundColor(Theme.paper)
 
-        prevBtn = navButton("‹  上屏", Gravity.START or Gravity.CENTER_VERTICAL)
+        prevBtn = navButton("◂ 上屏", Gravity.START or Gravity.CENTER_VERTICAL)
         prevBtn.setOnClickListener {
             if (top?.canPrev() == true) {
                 top?.onPrev()
@@ -210,9 +213,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         pageBtn = Ui.text(this, "", Theme.smallSize + 1, Theme.muted, gravity = Gravity.CENTER)
-        pageBtn.setPadding(dpD(10f), dpD(12f), dpD(10f), dpD(12f))
+        pageBtn.setPadding(dpD(8f), dpD(12f), dpD(8f), dpD(12f))
+        Ui.singleLine(pageBtn)
 
-        nextBtn = navButton("下屏  ›", Gravity.END or Gravity.CENTER_VERTICAL)
+        nextBtn = navButton("下屏 ▸", Gravity.END or Gravity.CENTER_VERTICAL)
         nextBtn.setOnClickListener {
             if (top?.canNext() == true) {
                 top?.onNext()
@@ -220,9 +224,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        bottomBar.addView(prevBtn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        bottomBar.addView(pageBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        bottomBar.addView(nextBtn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        // 返回：三角向上，与上屏 / 下屏那两个小三角同款；点击回上一页
+        backBtn = navButton("▴ 返回", Gravity.START or Gravity.CENTER_VERTICAL)
+        backBtn.setOnClickListener { goBack() }
+
+        layoutBottomBar()
 
         column.addView(bottomSep, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dpD(1f)))
         column.addView(
@@ -262,9 +268,101 @@ class MainActivity : AppCompatActivity() {
 
     private fun navButton(label: String, gravity: Int): TextView {
         val tv = Ui.text(this, label, Theme.smallSize + 1, Theme.ink, gravity = gravity)
-        tv.setPadding(dpD(16f), dpD(12f), dpD(16f), dpD(12f))
+        // 底栏最多并排三个按钮，左右内边距收窄并强制单行，避免字号调大后换行撑高
+        tv.setPadding(dpD(10f), dpD(12f), dpD(10f), dpD(12f))
+        // 只剩一两个按钮时按钮收成文字宽度，给个最小宽度保证点击区域不至于太小
+        tv.minimumWidth = dpD(84f)
+        Ui.singleLine(tv)
         tv.isClickable = true
         return tv
+    }
+
+    /**
+     * 按「左右手习惯」+「三按钮显隐」重排底部导航栏。页码（pageBtn）始终参与排布：
+     *
+     * 三个按钮（右手）：上屏 | 页码 | 下屏 ⟶ 返回，最后两个按钮之间留一道空档，免得挤在一起；
+     * 三个按钮（左手）：返回 ⟶ 下屏 | 页码 | 上屏，空档加在左边两个之间（整排镜像）。
+     * 两个按钮：两个按钮分置左右两端，页码居中。
+     * 一个按钮：右手放在最右边，左手放在最左边，页码占另一侧。
+     */
+    private fun layoutBottomBar() {
+        bottomBar.removeAllViews()
+
+        val navs = ArrayList<TextView>(3)
+        if (Prefs.leftHanded) {
+            if (Prefs.navBackVisible) navs.add(backBtn)
+            if (Prefs.navNextVisible) navs.add(nextBtn)
+            if (Prefs.navPrevVisible) navs.add(prevBtn)
+        } else {
+            if (Prefs.navPrevVisible) navs.add(prevBtn)
+            if (Prefs.navNextVisible) navs.add(nextBtn)
+            if (Prefs.navBackVisible) navs.add(backBtn)
+        }
+
+        fun stretch(weight: Float) {
+            bottomBar.addView(Ui.spacer(this, weight))
+        }
+
+        fun nav(v: View) {
+            bottomBar.addView(
+                v, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            )
+        }
+
+        fun tight(v: View) {
+            bottomBar.addView(
+                v,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+        }
+
+        /** 固定空档：给相邻两个按钮之间留呼吸空间 */
+        fun gap() {
+            bottomBar.addView(View(this), LinearLayout.LayoutParams(dpD(18f), 1))
+        }
+
+        when (navs.size) {
+            3 -> {
+                if (Prefs.leftHanded) {
+                    nav(navs[0]); gap(); nav(navs[1]); tight(pageBtn); nav(navs[2])
+                } else {
+                    nav(navs[0]); tight(pageBtn); nav(navs[1]); gap(); nav(navs[2])
+                }
+            }
+            2 -> {
+                tight(navs[0]); stretch(1f); tight(pageBtn); stretch(1f); tight(navs[1])
+            }
+            1 -> {
+                if (Prefs.leftHanded) {
+                    tight(navs[0]); stretch(1f); tight(pageBtn); stretch(1f)
+                } else {
+                    stretch(1f); tight(pageBtn); stretch(1f); tight(navs[0])
+                }
+            }
+            else -> {
+                stretch(1f); tight(pageBtn); stretch(1f)
+            }
+        }
+        bottomBar.requestLayout()
+    }
+
+    /** 设置页改完「左右手 / 按钮显隐」后即时生效，不重建界面 */
+    fun refreshBottomBar() {
+        if (!::bottomBar.isInitialized) return
+        layoutBottomBar()
+        refreshChrome()
+    }
+
+    /** 底部「返回」：与系统返回键同逻辑，但已在最底层时不做退出 */
+    private fun goBack() {
+        val page = top
+        if (page != null && page.onBack()) {
+            refreshChrome()
+            return
+        }
+        if (stack.size > 1) pop()
     }
 
     fun push(page: Page, animate: Boolean = true) {
@@ -308,12 +406,17 @@ class MainActivity : AppCompatActivity() {
         pageBtn.text = label
         if (::envelope.isInitialized) envelope.setCount(MessageCenter.state.total)
         if (Theme.eink) {
-            bottomBar.visibility = View.VISIBLE
+            val anyBtn = Prefs.navPrevVisible || Prefs.navNextVisible || Prefs.navBackVisible
+            val showBar = anyBtn || label.isNotBlank()
+            bottomBar.visibility = if (showBar) View.VISIBLE else View.GONE
+            bottomSep.visibility = if (showBar) View.VISIBLE else View.GONE
             prevBtn.alpha = if (page.canPrev()) 1f else 0.3f
             nextBtn.alpha = if (page.canNext()) 1f else 0.3f
+            backBtn.alpha = if (stack.size > 1) 1f else 0.3f
             counterView.visibility = View.GONE
         } else {
             bottomBar.visibility = View.GONE
+            bottomSep.visibility = View.GONE
             counterView.visibility = View.VISIBLE
         }
     }
@@ -345,6 +448,11 @@ class MainActivity : AppCompatActivity() {
     /** 设置里切换 E-Ink 模式后重建界面 */
     fun applyThemeChange() {
         recreate()
+    }
+
+    /** 行间距调整后，把栈内已建好的页面文本按新行距原地刷新（不重建界面、不丢导航状态） */
+    fun refreshLineSpacingNow() {
+        for (p in stack) Ui.applyLineSpacing(p)
     }
 
     // ────────────────────────────────────────────────────────────────

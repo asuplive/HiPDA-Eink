@@ -1,6 +1,9 @@
 package com.marvis.hipda.ui.pages
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.content.Context
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -472,27 +475,7 @@ class ThreadDetailPage(
             }
             Prefs.IMAGE_TAP -> {
                 val holder = Ui.column(host)
-                val tip = Ui.text(host, "[图片] " + name + "　·　点击加载", Theme.smallSize, Theme.muted)
-                tip.setPadding(0, dpD(5f), 0, dpD(5f))
-                tip.isClickable = true
-                tip.setOnClickListener {
-                    tip.text = "[图片] " + name + "　·　加载中…"
-                    ImageLoader.load(url) { bitmap: Bitmap? ->
-                        if (bitmap != null) {
-                            holder.removeAllViews()
-                            val iv = buildImageView(url)
-                            applyBitmap(iv, bitmap)
-                            holder.addView(iv)
-                        } else {
-                            tip.text = "[图片] " + name + "　·　加载失败，点击重试"
-                        }
-                    }
-                }
-                tip.setOnLongClickListener {
-                    host.push(WebViewPage(host, "查看图片", url))
-                    true
-                }
-                holder.addView(tip)
+                holder.addView(downloadCard(url, name, holder))
                 return holder
             }
             else -> {
@@ -519,6 +502,62 @@ class ThreadDetailPage(
                 return holder
             }
         }
+    }
+
+    /**
+     * 「点击下载」模式的占位卡片：
+     * 一个带边框的长方形块（比原来一行灰字大得多，触摸热区也更大），
+     * 左侧一个下载图示，右侧大字「点击下载图片」，下面小字附文件名。
+     * 点一下才真正下载，成功后整块换成图片；失败则在卡内提示可重试，长按可直接用浏览器打开。
+     */
+    private fun downloadCard(url: String, name: String, holder: LinearLayout): View {
+        val card = Ui.row(host)
+        card.background = Ui.card(host, stroke = true, fill = true)
+        card.setPadding(dpD(14f), dpD(10f), dpD(14f), dpD(10f))
+        // 用最小高度而非死值：字号调大时卡片跟着长高，正文不会被裁切
+        card.minimumHeight = dpD(68f)
+        card.isClickable = true
+
+        card.addView(
+            DownloadGlyph(host),
+            LinearLayout.LayoutParams(dpD(26f), dpD(26f)).apply { rightMargin = dpD(14f) }
+        )
+
+        val texts = Ui.column(host)
+        val label = Ui.text(host, "点击下载图片", Theme.bodySize, Theme.ink, bold = true)
+        val sub = Ui.text(host, name, Theme.smallSize - 2, Theme.muted)
+        Ui.singleLine(sub)
+        texts.addView(label)
+        texts.addView(sub)
+        card.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+
+        card.layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply {
+            topMargin = dpD(5f)
+            bottomMargin = dpD(7f)
+        }
+
+        card.setOnClickListener {
+            label.text = "正在下载…"
+            card.isClickable = false
+            ImageLoader.load(url) { bitmap: Bitmap? ->
+                if (bitmap != null) {
+                    holder.removeAllViews()
+                    val iv = buildImageView(url)
+                    applyBitmap(iv, bitmap)
+                    holder.addView(iv)
+                } else {
+                    label.text = "下载失败，点击重试"
+                    card.isClickable = true
+                }
+            }
+        }
+        card.setOnLongClickListener {
+            host.push(WebViewPage(host, "查看图片", url))
+            true
+        }
+        return card
     }
 
     private fun buildImageView(url: String): ImageView {
@@ -568,5 +607,41 @@ class ThreadDetailPage(
 
     override fun refresh() {
         load(page, force = true)
+    }
+}
+
+/**
+ * 「点击下载图片」占位卡左侧的下载图示：竖箭杆 + 箭头 + 底部托盘，
+ * 直接用 Canvas 画，不走 emoji/字体，颜色跟随主题（E-Ink 下纯黑/纯白，边缘锐利）。
+ */
+private class DownloadGlyph(context: Context) : View(context) {
+
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
+        paint.color = Theme.ink
+        paint.strokeWidth = (w * 0.055f).coerceAtLeast(1f)
+
+        val cx = w / 2f
+        val shaftBottom = h * 0.56f
+        canvas.drawLine(cx, h * 0.12f, cx, shaftBottom, paint)
+        val head = w * 0.17f
+        canvas.drawLine(cx - head, shaftBottom - head, cx, shaftBottom, paint)
+        canvas.drawLine(cx + head, shaftBottom - head, cx, shaftBottom, paint)
+
+        val trayTop = h * 0.66f
+        val bottom = h * 0.92f
+        val left = w * 0.13f
+        val right = w * 0.87f
+        canvas.drawLine(left, trayTop, left, bottom, paint)
+        canvas.drawLine(left, bottom, right, bottom, paint)
+        canvas.drawLine(right, bottom, right, trayTop, paint)
     }
 }
