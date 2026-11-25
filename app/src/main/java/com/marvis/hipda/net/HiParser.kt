@@ -591,7 +591,23 @@ object HiParser {
         return com.marvis.hipda.model.PostResult(false, "提交后未确认成功，请到帖子中确认")
     }
 
-    fun parseThreadDetail(doc: Document, tid: String): PostPage? {
+    /**
+     * 解析帖子正文页。
+     *
+     * 「楼主」判定不再是「只有 1 楼算楼主」：真实场景里楼主会在自己帖子里回帖，那些楼也要打标。
+     * 楼主基准取值优先级：
+     *   1. 本页 floor == 1 楼层（首页）的 uid / 作者名；
+     *   2. 本页没有 1 楼时（翻到第 2 页及以后），用 [knownOpUid] / [knownOpAuthor] 兜底，
+     *      由 ThreadDetailPage 在首次加载成功后记住、翻页时回传；
+     *   3. 再没有时用列表页带过来的作者名 / id（[knownOpAuthor] / [knownOpUid] 同一条通路）。
+     * 比对时 uid 优先（避免同名不同人误判），uid 缺失时才退回比作者名。
+     */
+    fun parseThreadDetail(
+        doc: Document,
+        tid: String,
+        knownOpAuthor: String = "",
+        knownOpUid: String = ""
+    ): PostPage? {
         val (page, last) = parsePageInfo(doc)
         val root = doc.select("div#wrap div#postlist").firstOrNull()
             ?: doc.select("div#postlist").firstOrNull()
@@ -676,7 +692,36 @@ object HiParser {
                 )
             )
         }
-        return PostPage(tid, title, posts, page, last, fid)
+
+        // ── 楼主身份：本页 1 楼的 uid / 作者名优先，其次用调用方记住的（翻页 / 列表页带过来）兜底
+        val firstPost = posts.firstOrNull { it.floor == 1 }
+        val opUid = firstPost?.uid?.trim()?.takeIf { it.isNotBlank() }
+            ?: knownOpUid.trim().takeIf { it.isNotBlank() }.orEmpty()
+        val opAuthor = firstPost?.author?.trim()?.takeIf { it.isNotBlank() }
+            ?: knownOpAuthor.trim().takeIf { it.isNotBlank() }.orEmpty()
+
+        // uid 能对上就认 uid（同名不同人不误伤）；楼主 uid 缺失时才退回比作者名
+        val postsWithOp = if (opUid.isBlank() && opAuthor.isBlank()) {
+            posts
+        } else {
+            posts.map { p ->
+                val isOp = p.floor == 1 ||
+                    (opUid.isNotBlank() && p.uid.isNotBlank() && p.uid == opUid) ||
+                    (opUid.isBlank() && opAuthor.isNotBlank() && p.author.trim() == opAuthor)
+                if (isOp == p.op) p else p.copy(op = isOp)
+            }
+        }
+
+        return PostPage(
+            tid = tid,
+            title = title,
+            posts = postsWithOp,
+            page = page,
+            lastPage = last,
+            fid = fid,
+            opAuthor = opAuthor,
+            opUid = opUid
+        )
     }
 
     private fun parseBlocks(root: Element): List<Block> {

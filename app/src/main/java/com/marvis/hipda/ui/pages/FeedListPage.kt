@@ -197,7 +197,8 @@ class FeedListPage(
         if (item.tid.isNotBlank()) {
             card.isClickable = true
             card.setOnClickListener {
-                host.push(ThreadDetailPage(host, item.tid, item.title))
+                // 同上：带上已知的作者名，供详情页翻页兜底判定「楼主」
+                host.push(ThreadDetailPage(host, item.tid, item.title, "", item.author, ""))
             }
         }
         return card

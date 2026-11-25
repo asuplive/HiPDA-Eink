@@ -65,7 +65,10 @@ data class PostPage(
     val posts: List<PostItem>,
     val page: Int,
     val lastPage: Int,
-    val fid: String = ""
+    val fid: String = "",
+    /** 本帖楼主名与 uid：解析时确定（本页 1 楼优先，其次外部传入兜底），供翻页继续判定「楼主」 */
+    val opAuthor: String = "",
+    val opUid: String = ""
 )
 
 data class LoginResult(val success: Boolean, val message: String)

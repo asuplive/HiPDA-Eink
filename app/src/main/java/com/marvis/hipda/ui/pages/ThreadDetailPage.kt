@@ -29,7 +29,10 @@ class ThreadDetailPage(
     private val tid: String,
     private val fallbackTitle: String,
     /** 从提醒进来时要定位的楼层 pid；空串表示普通打开 */
-    private val focusPid: String = ""
+    private val focusPid: String = "",
+    /** 跳转来源（列表 / 收藏 / 我的回复等）已知的楼主名与 uid：翻页兜底判定「楼主」用 */
+    listAuthor: String = "",
+    listUid: String = ""
 ) : ScrollPage(host) {
 
     private var page = 1
@@ -41,6 +44,14 @@ class ThreadDetailPage(
     /** 分批渲染代次：重新载入后旧批次不能再往 body 加视图 */
     private var renderToken = 0
 
+    /**
+     * 本帖楼主身份：先取跳转来源带过来的（列表 / 收藏里的作者名与 id），
+     * 首页解析成功后以 1 楼为准覆盖，翻到第 2 页及以后回传给解析器，
+     * 保证楼主自己在后面的回帖也带「楼主」标签。只在取到非空值时更新，刷新/重载不会丢。
+     */
+    private var opAuthor: String = listAuthor
+    private var opUid: String = listUid
+
     /** 待定位的楼层：载入到含该楼的那一页后清空，后续翻页不再跳 */
     private var pendingFocus = focusPid
     private var focusView: View? = null
@@ -48,8 +59,13 @@ class ThreadDetailPage(
     /** 站点也没给出含该楼的那页时，退回普通第一页，只退一次 */
     private var focusMissed = false
 
+    /** 顶栏标题：显示帖子标题，字数超出时顶栏自己收成「…」，点一下可下拉展开全文 */
     override val title: String
         get() = data?.title?.takeIf { it.isNotBlank() } ?: fallbackTitle
+
+    /** 顶栏下拉展开用的完整标题：与顶栏一致，点标题时整段铺开、不截断 */
+    override val expandTitle: String
+        get() = title
 
     init {
         load(1)
@@ -74,10 +90,13 @@ class ThreadDetailPage(
             forceRefresh = force,
             onHtml = { html ->
                 Async.run(
-                    work = { HiApi.threadDetailFromHtml(html, url, tid) },
+                    work = { HiApi.threadDetailFromHtml(html, url, tid, opAuthor, opUid) },
                     onSuccess = { result ->
                         loading = false
                         data = result
+                        // 记住楼主身份：本页若含 1 楼就以它为准，否则保留已有值，供后续翻页继续打「楼主」标签
+                        if (result.opUid.isNotBlank()) opUid = result.opUid
+                        if (result.opAuthor.isNotBlank()) opAuthor = result.opAuthor
                         page = result.page.coerceAtLeast(1)
                         lastPage = result.lastPage.coerceAtLeast(1)
                         if (jump) {
@@ -343,7 +362,8 @@ class ThreadDetailPage(
         }
         val author = Ui.text(host, post.author.ifBlank { "匿名" }, Theme.smallSize + 1, Theme.ink, bold = true)
         head.addView(author)
-        if (post.op) {
+        // 楼主回帖时的「楼主」标签：受帖子设置里的开关控制，关闭后标签与前面那段间隔一起不留
+        if (post.op && Prefs.showOpBadge) {
             val gap = View(host)
             head.addView(gap, LinearLayout.LayoutParams(dpD(6f), 1))
             head.addView(Ui.badge(host, "楼主"))

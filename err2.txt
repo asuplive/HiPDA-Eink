@@ -1,0 +1,35 @@
+e: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/net/HiParser.kt:249:68 Unresolved reference: FeedPage
+e: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/net/HiParser.kt:252:35 Unresolved reference: FeedItem
+e: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/net/HiParser.kt:274:27 Unresolved reference: FeedItem
+e: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/net/HiParser.kt:281:16 Unresolved reference: FeedPage
+e: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/net/HiParser.kt:285:37 Unresolved reference: PmPage
+e: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/net/HiParser.kt:287:35 Unresolved reference: PmItem
+e: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/net/HiParser.kt:304:23 Unresolved reference: PmItem
+e: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/net/HiParser.kt:306:16 Unresolved reference: PmPage
+e: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/net/HiParser.kt:326:48 Only safe (?.) or non-null asserted (!!.) calls are allowed on a nullable receiver of type Elements?
+e: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/net/HiParser.kt:371:52 Unresolved reference: FormSpec
+e: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/net/HiParser.kt:376:20 Unresolved reference: FormSpec
+e: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/net/HiParser.kt:398:16 Unresolved reference: FormSpec
+e: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/net/HiParser.kt:407:19 Unresolved reference: hint
+e: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/net/HiParser.kt:442:19 Unresolved reference: Jsoup
+e: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/net/HiParser.kt:444:34 Unresolved reference: it
+e: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/net/HiParser.kt:462:38 Unresolved reference: it
+e: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/ui/pages/AboutPage.kt:65:27 Type mismatch: inferred type is Int but Float was expected
+e: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/ui/pages/FeedListPage.kt:67:35 Cannot infer a type for this parameter. Please specify it explicitly.
+e: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/ui/pages/PmListPage.kt:56:35 Cannot infer a type for this parameter. Please specify it explicitly.
+e: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/ui/pages/PostEditorPage.kt:63:35 Cannot infer a type for this parameter. Please specify it explicitly.
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:compileDebugKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 26s

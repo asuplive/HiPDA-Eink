@@ -42,6 +42,11 @@ import com.marvis.hipda.util.MsgPoll
 class MainActivity : AppCompatActivity() {
 
     private lateinit var titleView: TextView
+    /** 顶栏标题是否处于展开态：收起为单行，展开后顶栏自身向下伸高最多三行 */
+    private var titleExpanded = false
+    /** 上一次刷新顶栏时的页面对象与标题文字：换页或标题变了就收回单行，避免带到其他页面 */
+    private var chromePage: Page? = null
+    private var chromeTitle: CharSequence = ""
     private lateinit var counterView: TextView
     private lateinit var contentHost: FrameLayout
     private lateinit var bottomBar: LinearLayout
@@ -169,8 +174,13 @@ class MainActivity : AppCompatActivity() {
         topBar.addView(gap, LinearLayout.LayoutParams(dpD(10f), 1))
 
         titleView = Ui.text(this, "", Theme.titleSize, Theme.ink, bold = true)
+        // 顶栏标题收起态固定单行：字数超出时末尾收成「…」（这三点就是展开入口）。
+        // 点标题本身（含三点）让顶栏自己向下伸高，在顶栏内部铺开最多三行完整标题；
+        // 再点一下回到单行。不支持展开的页面（expandTitle 为空）点了没有反应。
         Ui.singleLine(titleView)
         titleView.ellipsize = android.text.TextUtils.TruncateAt.END
+        titleView.isClickable = true
+        titleView.setOnClickListener { toggleTitleExpand() }
         topBar.addView(
             titleView,
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
@@ -400,7 +410,16 @@ class MainActivity : AppCompatActivity() {
 
     fun refreshChrome() {
         val page = top ?: return
-        titleView.text = page.title
+        // 换页（push / pop / resetTo 后页面对象变了）或标题文字变了，就收回单行，
+        // 免得上一页展开的标题跟到新页面上；同页只刷新其他信息则保持当前展开状态。
+        val title = page.title
+        if (page !== chromePage || title != chromeTitle) {
+            chromePage = page
+            chromeTitle = title
+            setTitleExpanded(false)
+        }
+        titleView.text = title
+        if (titleExpanded) applyTitleExpandedLineSpacing()
         val label = page.pageText()
         counterView.text = label
         pageBtn.text = label
@@ -419,6 +438,38 @@ class MainActivity : AppCompatActivity() {
             bottomSep.visibility = View.GONE
             counterView.visibility = View.VISIBLE
         }
+    }
+
+    /** 点顶栏标题：有完整标题就把顶栏自己撑高到最多三行；expandTitle 为空的页面点了没反应 */
+    private fun toggleTitleExpand() {
+        if (!::titleView.isInitialized) return
+        val full = top?.expandTitle ?: ""
+        if (full.isBlank()) return
+        setTitleExpanded(!titleExpanded)
+    }
+
+    /**
+     * 切换顶栏标题的单行 / 展开态。
+     * 收起：maxLines = 1，超出收成「…」；展开：maxLines = 3，行距略收紧，顶栏随 WRAP_CONTENT 自动伸高，
+     * 三行内完整显示（仍超长保留「…」兜底）。顶栏是 CENTER_VERTICAL 的横排，Hi 方块 / 信封 / 页码自动垂直居中。
+     */
+    private fun setTitleExpanded(expanded: Boolean) {
+        if (!::titleView.isInitialized) return
+        titleExpanded = expanded
+        if (expanded) {
+            titleView.maxLines = 3
+            titleView.ellipsize = android.text.TextUtils.TruncateAt.END
+        } else {
+            Ui.singleLine(titleView)
+        }
+        applyTitleExpandedLineSpacing()
+    }
+
+    /** 展开态用略紧凑的行距（lineGap 的 0.8 倍，不小于 0）；收起态回到常规行距 */
+    private fun applyTitleExpandedLineSpacing() {
+        if (!::titleView.isInitialized) return
+        val gap = lineGap()
+        titleView.setLineSpacing(if (titleExpanded) (gap * 0.8f).coerceAtLeast(0f) else gap, 1f)
     }
 
     /** 翻页后按设定触发一次整屏"全刷"，减少墨水屏残影 */

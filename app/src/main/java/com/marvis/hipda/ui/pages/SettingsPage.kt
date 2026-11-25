@@ -121,6 +121,17 @@ class SettingsPage(host: MainActivity) : ScrollPage(host) {
                     "个性签名显示在正文末尾。"
             )
         )
+        body.addView(row("显示楼主标签", if (Prefs.showOpBadge) "开" else "关") {
+            Prefs.showOpBadge = !Prefs.showOpBadge
+            render()
+            chrome()
+        })
+        body.addView(
+            hint(
+                "默认开启。楼主回帖的楼层在作者名后显示「楼主」标签，方便一眼分辨楼主的回复；" +
+                    "关闭后不再显示该标签，也不留多余间隔。"
+            )
+        )
 
         body.addView(sectionLabel("翻页"))
         body.addView(row("按键翻页", if (Prefs.keyTurn) "开" else "关") {

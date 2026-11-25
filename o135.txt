@@ -1,0 +1,72 @@
+
+> Configure project :app
+WARNING: The option setting 'android.overridePathCheck=true' is experimental.
+The current default is 'false'.
+
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preReleaseBuild UP-TO-DATE
+> Task :app:mergeReleaseJniLibFolders
+> Task :app:mergeReleaseNativeLibs NO-SOURCE
+> Task :app:stripReleaseDebugSymbols NO-SOURCE
+> Task :app:extractReleaseNativeSymbolTables NO-SOURCE
+> Task :app:mergeReleaseNativeDebugMetadata NO-SOURCE
+> Task :app:checkReleaseDuplicateClasses
+> Task :app:buildKotlinToolingMetadata
+> Task :app:checkKotlinGradlePluginConfigurationErrors
+> Task :app:dataBindingMergeDependencyArtifactsRelease
+> Task :app:generateReleaseResValues FROM-CACHE
+> Task :app:generateReleaseResources
+> Task :app:packageReleaseResources
+> Task :app:generateReleaseBuildConfig
+> Task :app:mapReleaseSourceSetPaths
+> Task :app:parseReleaseLocalResources
+> Task :app:checkReleaseAarMetadata
+> Task :app:createReleaseCompatibleScreenManifests
+> Task :app:extractDeepLinksRelease FROM-CACHE
+> Task :app:processReleaseMainManifest
+> Task :app:processReleaseManifest
+> Task :app:javaPreCompileRelease FROM-CACHE
+> Task :app:desugarReleaseFileDependencies FROM-CACHE
+> Task :app:mergeReleaseStartupProfile
+> Task :app:mergeExtDexRelease FROM-CACHE
+> Task :app:mergeReleaseResources
+> Task :app:mergeReleaseArtProfile
+> Task :app:dataBindingGenBaseClassesRelease FROM-CACHE
+> Task :app:mergeReleaseShaders
+> Task :app:compileReleaseShaders NO-SOURCE
+> Task :app:generateReleaseAssets UP-TO-DATE
+> Task :app:mergeReleaseAssets
+> Task :app:processReleaseManifestForPackage
+> Task :app:compressReleaseAssets FROM-CACHE
+> Task :app:extractReleaseVersionControlInfo
+> Task :app:collectReleaseDependencies
+> Task :app:sdkReleaseDependencyData
+> Task :app:validateSigningRelease
+> Task :app:writeReleaseAppMetadata
+> Task :app:writeReleaseSigningConfigVersions
+> Task :app:processReleaseResources
+> Task :app:optimizeReleaseResources
+
+> Task :app:compileReleaseKotlin
+w: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/data/Forums.kt:194:19 Parameter 'fid' is never used
+w: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/net/HiParser.kt:277:55 Unnecessary safe call on a non-null receiver of type String!
+w: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/ui/MainActivity.kt:63:35 'SYSTEM_UI_FLAG_LIGHT_STATUS_BAR: Int' is deprecated. Deprecated in Java
+w: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/ui/MainActivity.kt:64:68 'SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR: Int' is deprecated. Deprecated in Java
+w: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/ui/MainActivity.kt:66:26 'setter for systemUiVisibility: Int' is deprecated. Deprecated in Java
+w: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/ui/MainActivity.kt:189:26 Parameter 'animate' is never used
+w: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/ui/pages/FeedListPage.kt:86:36 Parameter 'append' is never used
+w: file:///C:/hipda-build/app/src/main/java/com/marvis/hipda/ui/pages/Page.kt:105:9 Parameter 'okhttpReason' is never used
+
+> Task :app:compileReleaseJavaWithJavac
+> Task :app:dexBuilderRelease
+> Task :app:mergeReleaseGlobalSynthetics FROM-CACHE
+> Task :app:processReleaseJavaRes
+> Task :app:mergeReleaseJavaResource
+> Task :app:mergeDexRelease
+> Task :app:compileReleaseArtProfile
+> Task :app:packageRelease
+> Task :app:createReleaseApkListingFileRedirect
+> Task :app:assembleRelease
+
+BUILD SUCCESSFUL in 49s
+45 actionable tasks: 37 executed, 8 from cache

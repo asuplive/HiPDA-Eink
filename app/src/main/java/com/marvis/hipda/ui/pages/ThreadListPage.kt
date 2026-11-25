@@ -252,7 +252,8 @@ class ThreadListPage(
 
         row.isClickable = true
         row.setOnClickListener {
-            host.push(ThreadDetailPage(host, item.tid, item.title))
+            // 把列表里的作者名 / uid 带进详情页：翻页时用来兜底判定「楼主」
+            host.push(ThreadDetailPage(host, item.tid, item.title, "", item.author, item.authorId))
         }
         return row
     }

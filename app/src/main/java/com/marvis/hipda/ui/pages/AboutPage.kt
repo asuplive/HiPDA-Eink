@@ -1,16 +1,28 @@
 package com.marvis.hipda.ui.pages
 
 import android.view.View
+import android.widget.LinearLayout
 import com.marvis.hipda.BuildConfig
+import com.marvis.hipda.net.UpdateApi
 import com.marvis.hipda.ui.MainActivity
 import com.marvis.hipda.ui.Theme
 import com.marvis.hipda.ui.Ui
 import com.marvis.hipda.ui.dpD
+import com.marvis.hipda.util.Async
 
-/** 关于：一段自写简介 + 版本信息 */
+/**
+ * 关于：简介 + 版本信息 + 项目地址 + 下载/更新入口。
+ *
+ * 全部用代码搭视图，纯灰阶、无动画、无弹层：
+ * 点「检查更新」在后台线程请求 GitHub Release，结果就在本页原地回显一行行文字。
+ */
 class AboutPage(host: MainActivity) : ScrollPage(host) {
 
     override val title: String = "关于"
+
+    /** 检查更新的结果区域：每次检查前清空重建，页面高度随之变化 */
+    private lateinit var updateBox: LinearLayout
+    private var checking = false
 
     init {
         render()
@@ -47,6 +59,32 @@ class AboutPage(host: MainActivity) : ScrollPage(host) {
             "数据全部来自 4d4y.com 站点本身，本程序不收集、不上传任何账号信息，登录凭据只保存在本机。"
         ))
 
+        // ── 项目地址 ───────────────────────────────────────────────
+        body.addView(sectionTitle("项目地址"))
+        body.addView(
+            linkRow("源码仓库", UpdateApi.GITHUB_URL) {
+                openLink("项目地址", UpdateApi.GITHUB_URL)
+            }
+        )
+
+        // ── 下载 / 更新 ────────────────────────────────────────────
+        body.addView(sectionTitle("下载 / 更新"))
+        body.addView(
+            linkRow("蓝奏云下载（提取码 " + UpdateApi.LANZOU_CODE + "）", UpdateApi.LANZOU_URL) {
+                openLink("蓝奏云下载", UpdateApi.LANZOU_URL)
+            }
+        )
+
+        val check = Ui.text(host, "检查更新", Theme.bodySize, Theme.ink, bold = true)
+        check.setPadding(0, dpD(10f), 0, dpD(6f))
+        check.isClickable = true
+        check.setOnClickListener { checkUpdate() }
+        body.addView(check)
+
+        updateBox = Ui.column(host)
+        body.addView(updateBox)
+        showIdle()
+
         body.addView(
             Ui.text(host, "非官方客户端，与站点管理方无关。", Theme.smallSize - 1, Theme.muted)
                 .apply { setPadding(0, dpD(12f), 0, 0) }
@@ -58,6 +96,118 @@ class AboutPage(host: MainActivity) : ScrollPage(host) {
         refreshTip.setOnClickListener { host.pop() }
         body.addView(refreshTip)
         chrome()
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // 检查更新
+    // ────────────────────────────────────────────────────────────────
+
+    private fun showIdle() {
+        updateBox.removeAllViews()
+        updateBox.addView(note("向 GitHub 查询最新发布版本，蓝奏云作为备用下载入口。", Theme.muted))
+    }
+
+    private fun checkUpdate() {
+        if (checking) return
+        checking = true
+        updateBox.removeAllViews()
+        updateBox.addView(note("正在查询…", Theme.muted))
+        chrome()
+
+        Async.run(
+            work = { UpdateApi.fetchLatest() },
+            onSuccess = { info ->
+                checking = false
+                showResult(info)
+            },
+            onError = {
+                checking = false
+                showFailure()
+            }
+        )
+    }
+
+    private fun showResult(info: UpdateApi.UpdateInfo) {
+        val current = UpdateApi.currentVersion()
+        updateBox.removeAllViews()
+
+        if (UpdateApi.isNewer(info.version, current)) {
+            updateBox.addView(
+                note("发现新版本 " + info.version + "（当前 " + current + "）", Theme.ink, bold = true)
+            )
+
+            val notes = info.notes.trim()
+            if (notes.isNotEmpty()) {
+                val tv = Ui.text(host, shorten(notes, 400), Theme.smallSize + 1, Theme.secondary)
+                tv.setLineSpacing(dpD(4f).toFloat(), 1f)
+                tv.setPadding(0, dpD(6f), 0, dpD(6f))
+                updateBox.addView(tv)
+            }
+
+            val target = info.apkUrl ?: info.pageUrl
+            val label = if (info.tag.isNotBlank()) "GitHub 下载（" + info.tag + "）" else "GitHub 下载"
+            updateBox.addView(linkRow(label, target) { openLink("更新下载", target) })
+        } else {
+            updateBox.addView(
+                note("已是最新版本 " + current, Theme.ink, bold = true)
+            )
+        }
+
+        // 无论有没有新版本，蓝奏云入口都留在结果区，方便手动取包
+        updateBox.addView(
+            linkRow("蓝奏云下载（提取码 " + UpdateApi.LANZOU_CODE + "）", UpdateApi.LANZOU_URL) {
+                openLink("蓝奏云下载", UpdateApi.LANZOU_URL)
+            }
+        )
+        chrome()
+    }
+
+    private fun showFailure() {
+        updateBox.removeAllViews()
+        updateBox.addView(note("检查失败，可手动访问项目地址。", Theme.secondary))
+        updateBox.addView(
+            linkRow("蓝奏云下载（提取码 " + UpdateApi.LANZOU_CODE + "）", UpdateApi.LANZOU_URL) {
+                openLink("蓝奏云下载", UpdateApi.LANZOU_URL)
+            }
+        )
+        chrome()
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // 视图小工具
+    // ────────────────────────────────────────────────────────────────
+
+    private fun openLink(pageTitle: String, url: String) {
+        host.push(WebViewPage(host, pageTitle, url))
+    }
+
+    private fun shorten(text: String, max: Int): String =
+        if (text.length <= max) text else text.substring(0, max).trimEnd() + "…"
+
+    private fun sectionTitle(text: String): View {
+        val tv = Ui.text(host, text, Theme.smallSize + 1, Theme.ink, bold = true)
+        tv.setPadding(0, dpD(16f), 0, dpD(2f))
+        return tv
+    }
+
+    /** 一行可点入口：上小字标签 + 下加粗可点内容 */
+    private fun linkRow(label: String, value: String, action: () -> Unit): View {
+        val col = Ui.column(host)
+        col.setPadding(0, dpD(5f), 0, dpD(5f))
+        col.addView(Ui.text(host, label, Theme.smallSize, Theme.muted))
+
+        val v = Ui.text(host, value, Theme.bodySize, Theme.link, bold = true)
+        v.setPadding(0, dpD(4f), 0, dpD(4f))
+        v.isClickable = true
+        v.setOnClickListener { action() }
+        col.addView(v)
+        return col
+    }
+
+    private fun note(text: String, color: Int, bold: Boolean = false): View {
+        val tv = Ui.text(host, text, Theme.smallSize + 1, color, bold = bold)
+        tv.setPadding(0, dpD(6f), 0, dpD(4f))
+        return tv
     }
 
     private fun para(text: String): View {

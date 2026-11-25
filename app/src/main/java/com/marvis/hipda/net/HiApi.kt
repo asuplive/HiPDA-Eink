@@ -56,11 +56,21 @@ object HiApi {
         return threadDetailFromHtml(result.body, result.url, tid)
     }
 
-    fun threadDetailFromHtml(html: String, url: String, tid: String): PostPage {
+    /**
+     * 解析帖子正文 HTML。[opAuthor] / [opUid] 是调用方已知道的楼主身份：
+     * 首页解析后由 ThreadDetailPage 记住，翻到第 2 页及以后回传，用来继续给楼主的回帖打「楼主」标签。
+     */
+    fun threadDetailFromHtml(
+        html: String,
+        url: String,
+        tid: String,
+        opAuthor: String = "",
+        opUid: String = ""
+    ): PostPage {
         val doc = Jsoup.parse(html, url)
         val uid = HiParser.parseUid(doc)
         if (uid.isNotBlank() && uid != Prefs.uid) Prefs.uid = uid
-        return HiParser.parseThreadDetail(doc, tid)
+        return HiParser.parseThreadDetail(doc, tid, opAuthor, opUid)
             ?: PostPage(tid, "", emptyList(), 1, 1, "")
     }
 

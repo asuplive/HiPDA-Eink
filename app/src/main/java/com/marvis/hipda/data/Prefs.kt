@@ -116,6 +116,11 @@ object Prefs {
         get() = sp.getBoolean("post_signature", false)
         set(value) = sp.edit().putBoolean("post_signature", value).apply()
 
+    /** 楼主回帖时显示「楼主」标签，默认开 */
+    var showOpBadge: Boolean
+        get() = sp.getBoolean("post_op_badge", true)
+        set(value) = sp.edit().putBoolean("post_op_badge", value).apply()
+
     /** 每隔多少页做一次全刷（E-Ink 残影控制） */
     var fullRefreshPages: Int
         get() = sp.getInt("full_refresh_pages", 6)

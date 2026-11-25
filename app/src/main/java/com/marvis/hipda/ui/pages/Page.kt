@@ -24,6 +24,8 @@ import kotlin.math.abs
 abstract class Page(val host: MainActivity) : FrameLayout(host) {
 
     open val title: String get() = ""
+    /** 顶栏标题点开后下拉显示的完整标题；空串表示该页面不支持下拉展开 */
+    open val expandTitle: String get() = ""
     open fun pageText(): String = ""
     open fun canPrev(): Boolean = false
     open fun canNext(): Boolean = false

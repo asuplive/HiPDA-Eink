@@ -1,0 +1,99 @@
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:dataBindingMergeDependencyArtifactsDebug'.
+> Could not resolve all files for configuration ':app:debugCompileClasspath'.
+   > Could not resolve androidx.databinding:viewbinding:8.5.0.
+     Required by:
+         project :app
+      > No cached version of androidx.databinding:viewbinding:8.5.0 available for offline mode.
+      > No cached version of androidx.databinding:viewbinding:8.5.0 available for offline mode.
+      > No cached version of androidx.databinding:viewbinding:8.5.0 available for offline mode.
+      > No cached version of androidx.databinding:viewbinding:8.5.0 available for offline mode.
+   > Could not resolve androidx.recyclerview:recyclerview:1.3.2.
+     Required by:
+         project :app
+      > No cached version of androidx.recyclerview:recyclerview:1.3.2 available for offline mode.
+      > No cached version of androidx.recyclerview:recyclerview:1.3.2 available for offline mode.
+      > No cached version of androidx.recyclerview:recyclerview:1.3.2 available for offline mode.
+      > No cached version of androidx.recyclerview:recyclerview:1.3.2 available for offline mode.
+   > Could not resolve androidx.swiperefreshlayout:swiperefreshlayout:1.1.0.
+     Required by:
+         project :app
+      > No cached version of androidx.swiperefreshlayout:swiperefreshlayout:1.1.0 available for offline mode.
+      > No cached version of androidx.swiperefreshlayout:swiperefreshlayout:1.1.0 available for offline mode.
+      > No cached version of androidx.swiperefreshlayout:swiperefreshlayout:1.1.0 available for offline mode.
+      > No cached version of androidx.swiperefreshlayout:swiperefreshlayout:1.1.0 available for offline mode.
+   > Could not resolve androidx.webkit:webkit:1.11.0.
+     Required by:
+         project :app
+      > No cached version of androidx.webkit:webkit:1.11.0 available for offline mode.
+      > No cached version of androidx.webkit:webkit:1.11.0 available for offline mode.
+      > No cached version of androidx.webkit:webkit:1.11.0 available for offline mode.
+      > No cached version of androidx.webkit:webkit:1.11.0 available for offline mode.
+   > Could not resolve com.squareup.okhttp3:okhttp:4.12.0.
+     Required by:
+         project :app
+      > No cached version of com.squareup.okhttp3:okhttp:4.12.0 available for offline mode.
+      > No cached version of com.squareup.okhttp3:okhttp:4.12.0 available for offline mode.
+      > No cached version of com.squareup.okhttp3:okhttp:4.12.0 available for offline mode.
+      > No cached version of com.squareup.okhttp3:okhttp:4.12.0 available for offline mode.
+   > Could not resolve org.jsoup:jsoup:1.17.2.
+     Required by:
+         project :app
+      > No cached version of org.jsoup:jsoup:1.17.2 available for offline mode.
+      > No cached version of org.jsoup:jsoup:1.17.2 available for offline mode.
+      > No cached version of org.jsoup:jsoup:1.17.2 available for offline mode.
+      > No cached version of org.jsoup:jsoup:1.17.2 available for offline mode.
+   > Could not resolve androidx.annotation:annotation-jvm:1.6.0.
+     Required by:
+         project :app > androidx.annotation:annotation:1.6.0
+      > No cached version of androidx.annotation:annotation-jvm:1.6.0 available for offline mode.
+      > No cached version of androidx.annotation:annotation-jvm:1.6.0 available for offline mode.
+      > No cached version of androidx.annotation:annotation-jvm:1.6.0 available for offline mode.
+      > No cached version of androidx.annotation:annotation-jvm:1.6.0 available for offline mode.
+   > Could not resolve androidx.lifecycle:lifecycle-viewmodel:2.6.2.
+     Required by:
+         project :app > androidx.activity:activity:1.6.0
+      > No cached version of androidx.lifecycle:lifecycle-viewmodel:2.6.2 available for offline mode.
+      > No cached version of androidx.lifecycle:lifecycle-viewmodel:2.6.2 available for offline mode.
+      > No cached version of androidx.lifecycle:lifecycle-viewmodel:2.6.2 available for offline mode.
+      > No cached version of androidx.lifecycle:lifecycle-viewmodel:2.6.2 available for offline mode.
+   > Could not resolve androidx.lifecycle:lifecycle-viewmodel-savedstate:2.6.2.
+     Required by:
+         project :app > androidx.activity:activity:1.6.0
+      > No cached version of androidx.lifecycle:lifecycle-viewmodel-savedstate:2.6.2 available for offline mode.
+      > No cached version of androidx.lifecycle:lifecycle-viewmodel-savedstate:2.6.2 available for offline mode.
+      > No cached version of androidx.lifecycle:lifecycle-viewmodel-savedstate:2.6.2 available for offline mode.
+      > No cached version of androidx.lifecycle:lifecycle-viewmodel-savedstate:2.6.2 available for offline mode.
+   > Could not resolve androidx.lifecycle:lifecycle-livedata-core:2.6.2.
+     Required by:
+         project :app > androidx.fragment:fragment:1.3.6
+      > No cached version of androidx.lifecycle:lifecycle-livedata-core:2.6.2 available for offline mode.
+      > No cached version of androidx.lifecycle:lifecycle-livedata-core:2.6.2 available for offline mode.
+      > No cached version of androidx.lifecycle:lifecycle-livedata-core:2.6.2 available for offline mode.
+      > No cached version of androidx.lifecycle:lifecycle-livedata-core:2.6.2 available for offline mode.
+   > Could not resolve androidx.lifecycle:lifecycle-common:2.6.2.
+     Required by:
+         project :app > androidx.lifecycle:lifecycle-runtime:2.6.2
+      > No cached version of androidx.lifecycle:lifecycle-common:2.6.2 available for offline mode.
+      > No cached version of androidx.lifecycle:lifecycle-common:2.6.2 available for offline mode.
+      > No cached version of androidx.lifecycle:lifecycle-common:2.6.2 available for offline mode.
+      > No cached version of androidx.lifecycle:lifecycle-common:2.6.2 available for offline mode.
+   > Could not resolve androidx.lifecycle:lifecycle-livedata:2.6.2.
+     Required by:
+         project :app > androidx.lifecycle:lifecycle-runtime:2.6.2
+      > No cached version of androidx.lifecycle:lifecycle-livedata:2.6.2 available for offline mode.
+      > No cached version of androidx.lifecycle:lifecycle-livedata:2.6.2 available for offline mode.
+      > No cached version of androidx.lifecycle:lifecycle-livedata:2.6.2 available for offline mode.
+      > No cached version of androidx.lifecycle:lifecycle-livedata:2.6.2 available for offline mode.
+> There are 28 more failures with identical causes.
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 18s
