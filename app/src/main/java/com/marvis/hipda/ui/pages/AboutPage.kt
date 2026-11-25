@@ -153,24 +153,24 @@ class AboutPage(host: MainActivity) : ScrollPage(host) {
             )
         }
 
-        // 无论有没有新版本，蓝奏云入口都留在结果区，方便手动取包
-        updateBox.addView(
-            linkRow("蓝奏云下载（提取码 " + UpdateApi.LANZOU_CODE + "）", UpdateApi.LANZOU_URL) {
-                openLink("蓝奏云下载", UpdateApi.LANZOU_URL)
-            }
-        )
+        // 无论有没有新版本，蓝奏云入口都留在结果区，方便手动取包。
+        // 地址优先用 release 说明里写的那条（发版时在说明里贴蓝奏链接即可自动跟随），否则用固定文件夹。
+        addLanzouRow(info.lanzouUrl, info.lanzouCode)
         chrome()
     }
 
     private fun showFailure() {
         updateBox.removeAllViews()
         updateBox.addView(note("检查失败，可手动访问项目地址。", Theme.secondary))
-        updateBox.addView(
-            linkRow("蓝奏云下载（提取码 " + UpdateApi.LANZOU_CODE + "）", UpdateApi.LANZOU_URL) {
-                openLink("蓝奏云下载", UpdateApi.LANZOU_URL)
-            }
-        )
+        addLanzouRow(UpdateApi.LANZOU_URL, UpdateApi.LANZOU_CODE)
         chrome()
+    }
+
+    private fun addLanzouRow(url: String, code: String) {
+        val label = if (code.isBlank()) "蓝奏云下载" else "蓝奏云下载（提取码 " + code + "）"
+        updateBox.addView(
+            linkRow(label, url) { openLink("蓝奏云下载", url) }
+        )
     }
 
     // ────────────────────────────────────────────────────────────────

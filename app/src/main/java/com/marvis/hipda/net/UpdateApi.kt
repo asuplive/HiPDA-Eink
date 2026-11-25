@@ -29,10 +29,13 @@ object UpdateApi {
 
     /**
      * 蓝奏云下载地址（备用下载入口）。
-     * 后续换包只需改这两处常量，页面与检查更新里都引用它们。
+     *
+     * 用「文件夹级固定分享」而不是单文件分享：文件夹地址长期不变，以后只往文件夹里传新包，
+     * 应用里这个入口就永远有效，不必每次发版都改代码。
+     * 若某次 Release 说明里写了蓝奏链接，则优先用说明里的那个（见 resolveLanzou）。
      */
-    const val LANZOU_URL = "https://wwana.lanzoue.com/iAmPE4h53cob"
-    const val LANZOU_CODE = "3tkz"
+    const val LANZOU_URL = "https://wwana.lanzoue.com/b01i6194kb"
+    const val LANZOU_CODE = "6ma8"
 
     /** 一次检查的结果 */
     data class UpdateInfo(
@@ -40,7 +43,11 @@ object UpdateApi {
         val version: String,
         val notes: String,
         val apkUrl: String?,
-        val pageUrl: String
+        val pageUrl: String,
+        /** 实际使用的蓝奏云地址：优先取自 release 说明，否则回退到常量 */
+        val lanzouUrl: String = LANZOU_URL,
+        /** 实际使用的提取码 */
+        val lanzouCode: String = LANZOU_CODE
     )
 
     private val client: OkHttpClient by lazy {
@@ -97,8 +104,48 @@ object UpdateApi {
             val apkUrl = pickApkUrl(json)
             val notes = json.optString("body").orEmpty()
 
-            return UpdateInfo(tag, version, notes, apkUrl, htmlUrl)
+            // 蓝奏入口：说明里写了就用说明里的，没写就用文件夹常量兜底
+            val lanzouUrl = resolveLanzouUrl(notes) ?: LANZOU_URL
+            // 提取码优先在链接后面那一小段里找，找不到再看全文，最后才用常量
+            val lanzouCode = resolveLanzouCode(notes, fromUrlOnly = true)
+                ?: resolveLanzouCode(notes)
+                ?: LANZOU_CODE
+
+            return UpdateInfo(tag, version, notes, apkUrl, htmlUrl, lanzouUrl, lanzouCode)
         }
+    }
+
+    /** 说明文本里第一个蓝奏云链接（lanzoue / lanzoui / lanzou 等域名都认） */
+    private val LANZOU_URL_RE = Regex(
+        """https?://[A-Za-z0-9._\-]*lanzou[a-z]*\.[A-Za-z0-9.\-]{2,20}/[A-Za-z0-9_\-]+""",
+        RegexOption.IGNORE_CASE
+    )
+
+    /** 「提取码 xxxx」「密码：xxxx」「访问码 xxxx」 */
+    private val LANZOU_CODE_RE = Regex(
+        """(?:提取码|密码|访问码)\s*[:：]?\s*([A-Za-z0-9]{3,12})""",
+        RegexOption.IGNORE_CASE
+    )
+
+    fun resolveLanzouUrl(text: String?): String? {
+        if (text.isNullOrBlank()) return null
+        val m = LANZOU_URL_RE.find(text) ?: return null
+        return m.value.trimEnd('.', ',', '。', '，', ')', '）')
+    }
+
+    /**
+     * 从说明里取提取码。
+     * @param fromUrlOnly 为 true 时只在链接后面那一小段里找，避免把正文里无关的「密码」认成提取码。
+     */
+    fun resolveLanzouCode(text: String?, fromUrlOnly: Boolean = false): String? {
+        if (text.isNullOrBlank()) return null
+        val scope = if (fromUrlOnly) {
+            val url = LANZOU_URL_RE.find(text) ?: return null
+            text.substring(url.range.last + 1).take(80)
+        } else {
+            text
+        }
+        return LANZOU_CODE_RE.find(scope)?.groupValues?.get(1)
     }
 
     /** assets 里挑第一个 .apk 的下载地址；没有就返回 null，页面改用 release 网页 */
