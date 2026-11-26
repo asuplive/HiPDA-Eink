@@ -121,6 +121,14 @@ object Prefs {
         get() = sp.getBoolean("post_op_badge", true)
         set(value) = sp.edit().putBoolean("post_op_badge", value).apply()
 
+    /**
+     * 浏览过的帖子是否缓存：开启后点开过的帖子会把正文顺手存到本机，断网或被拦截时照样能读。
+     * 默认关——只保留用户在「我的收藏」里主动点的「离线缓存」，不占用户不知情的空间。
+     */
+    var cacheVisitedThreads: Boolean
+        get() = sp.getBoolean("post_cache_visited", false)
+        set(value) = sp.edit().putBoolean("post_cache_visited", value).apply()
+
     /** 每隔多少页做一次全刷（E-Ink 残影控制） */
     var fullRefreshPages: Int
         get() = sp.getInt("full_refresh_pages", 6)

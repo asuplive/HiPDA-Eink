@@ -143,6 +143,25 @@ abstract class ScrollPage(host: MainActivity) : Page(host) {
     protected val scroller: ScrollView = pager ?: ScrollView(host)
     protected val body = LinearLayout(host)
 
+    /**
+     * 下拉刷新阈值：60dp，只按屏幕密度换算，**不乘「框间距」设置**——
+     * 否则把框间距调到 200% 时阈值会变成 120dp，得拖很久才响应。
+     */
+    protected val pullThresholdPx: Int
+        get() = (60f * resources.displayMetrics.density).toInt().coerceAtLeast(60)
+
+    /**
+     * 「已在顶部还继续下拉」的回调，由具体页面按需实现（默认不处理）。
+     *
+     * @param distancePx 本次手势从按下点算起的纵向位移（px），必然 ≥ pullThresholdPx
+     * @return true 表示手势被本页消费（不再翻页/回上一页）；false 则继续走原有翻页逻辑
+     */
+    protected open fun onPullDownRefresh(distancePx: Int): Boolean = false
+
+    /** 非整屏翻页模式（普通 ScrollView）下的下拉判定状态 */
+    private var plainDownY = 0f
+    private var plainPulled = false
+
     init {
         paperBackground()
         body.orientation = LinearLayout.VERTICAL
@@ -170,7 +189,43 @@ abstract class ScrollPage(host: MainActivity) : Page(host) {
                 if (hasPrevChunk()) onReachedStart()
             }
         }
+        // 下拉刷新与整屏翻页共存：只有「已在顶部继续下拉」才走刷新，
+        // 其余纵向滑动仍然由 EinkPager 整屏翻页，互不干扰。
+        pager?.onPullDown = { dy -> onPullDownRefresh(dy) }
+        if (pager == null) {
+            scroller.setOnTouchListener { _, ev -> handlePlainPull(ev) }
+        }
         attachFull(scroller)
+    }
+
+    /**
+     * 普通滚动模式下的下拉判定：顶部（scrollY <= 0）且下滑超过阈值才问页面要不要刷新；
+     * 一旦被消费，本次手势后续的 MOVE/UP 全部吞掉，避免顺带触发点击或滚动。
+     */
+    private fun handlePlainPull(ev: MotionEvent): Boolean {
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                plainDownY = ev.y
+                plainPulled = false
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (plainPulled) return true
+                val dy = ev.y - plainDownY
+                if (dy >= pullThresholdPx && scroller.scrollY <= 0) {
+                    if (onPullDownRefresh(dy.toInt())) {
+                        plainPulled = true
+                        return true
+                    }
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (plainPulled) {
+                    plainPulled = false
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     /** 墨水屏：整屏位移；普通模式：留一点重叠便于衔接 */
@@ -320,6 +375,16 @@ class EinkPager(context: Context) : ScrollView(context) {
     /** 已经翻到边界还要继续翻时回调：+1 下一页边界，-1 上一页边界 */
     var onBoundary: ((Int) -> Unit)? = null
 
+    /**
+     * 已经在最顶端还继续下拉时的回调，参数为从按下点算起的纵向位移（px）。
+     * 返回 true 表示这次手势归它所有（不再触发"回上一页"）；返回 false 则照旧走翻页边界逻辑。
+     */
+    var onPullDown: ((Int) -> Boolean)? = null
+
+    /** 下拉刷新阈值：60dp，只按屏幕密度换算，不受「框间距」设置影响 */
+    private val pullThreshold: Int
+        get() = (60f * resources.displayMetrics.density).toInt().coerceAtLeast(60)
+
     init {
         isFillViewport = true
         isVerticalScrollBarEnabled = false
@@ -397,6 +462,19 @@ class EinkPager(context: Context) : ScrollView(context) {
                 val dy = ev.y - downY
                 val dx = ev.x - downX
                 if (abs(dy) > slop * 2 && abs(dy) > abs(dx) * 1.4f) {
+                    // 已在最顶端（向上无可滚）时的下拉：先攒位移，够 60dp 再决定动作。
+                    // 页面接了刷新就消费手势；不接（比如还停在第 3 页）就照旧回上一页。
+                    if (dy > 0 && scrollY <= 2) {
+                        if (dy >= pullThreshold) {
+                            turned = true
+                            val cb = onPullDown
+                            if (cb == null || !cb(dy.toInt())) prevPage()
+                            cancelChild(ev)
+                            return true
+                        }
+                        // 未到阈值：本次手势既不翻页也不刷新，等后续 MOVE 继续攒
+                        return true
+                    }
                     turned = true
                     if (dy < 0) nextPage() else prevPage()
                     cancelChild(ev)

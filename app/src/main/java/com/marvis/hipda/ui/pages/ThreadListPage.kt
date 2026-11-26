@@ -34,6 +34,12 @@ class ThreadListPage(
     private var needVerify = false
     private var needLogin = false
 
+    /** 顶部下拉刷新中（与整页 load 分开：刷新时保留屏幕上的旧列表） */
+    private var refreshing = false
+    /** 列表顶部那一行纯灰阶状态文字：正在刷新… / 已刷新 / 刷新失败，下拉重试 */
+    private var pullState: String? = null
+    private var statusView: View? = null
+
     private val rowHeight = dpD(66f)
 
     override val title: String get() = forumName
@@ -45,6 +51,8 @@ class ThreadListPage(
     private fun load(target: Int, force: Boolean = false) {
         if (loading) return
         loading = true
+        refreshing = false
+        pullState = null
         errorText = null
         needVerify = false
         needLogin = false
@@ -75,6 +83,8 @@ class ThreadListPage(
 
     private fun fail(t: Throwable) {
         loading = false
+        refreshing = false
+        pullState = null
         needVerify = t is CfChallengeException
         needLogin = t is NotLoggedInException
         errorText = when (t) {
@@ -91,6 +101,7 @@ class ThreadListPage(
     private fun render() {
         clearBody()
         body.addView(headerBar())
+        addPullStatus()
         val err = errorText
         if (err != null) {
             val btn = when {
@@ -131,10 +142,11 @@ class ThreadListPage(
         for (item in items) {
             body.addView(threadRow(item))
         }
+        val pullHint = if (page == 1) "　·　已在顶部时下滑刷新" else ""
         val pageHint = if (page < lastPage) {
-            "第 " + page + " / " + lastPage + " 页　·　继续下滑载入下一页"
+            "第 " + page + " / " + lastPage + " 页　·　继续下滑载入下一页" + pullHint
         } else {
-            "第 " + page + " / " + lastPage + " 页　·　已到最后一页"
+            "第 " + page + " / " + lastPage + " 页　·　已到最后一页" + pullHint
         }
         body.addView(
             Ui.text(
@@ -145,7 +157,8 @@ class ThreadListPage(
                 gravity = android.view.Gravity.CENTER
             ).apply { setPadding(0, dpD(6f), 0, 0) }
         )
-        // 刷新做成明确的按钮：下滑/上滑只负责翻页，避免「一滑就刷新、视口跳回第一条」
+        // 刷新手势（列表最顶部下滑）走独立通道，见 onPullDownRefresh；
+        // 这个按钮保留成随时可用的显式入口，不必非得把列表拖回顶部。
         val reload = Ui.text(
             host, "↻ 刷新列表（回到第 1 页）", Theme.smallSize + 1, Theme.ink,
             bold = true, gravity = android.view.Gravity.CENTER
@@ -156,6 +169,26 @@ class ThreadListPage(
         body.addView(reload)
         chrome()
         prefetchTopThreads()
+    }
+
+    /**
+     * 列表最上面那行纯灰阶状态文字。
+     * 只在「顶部下拉刷新」期间出现，不占位时不渲染（null 就整行不加），
+     * 用纯文字表达状态，没有转圈、没有下拉回弹、没有动画。
+     */
+    private fun addPullStatus() {
+        val state = pullState
+        if (state == null) {
+            statusView = null
+            return
+        }
+        val line = Ui.text(
+            host, state, Theme.smallSize + 1, Theme.ink,
+            bold = true, gravity = android.view.Gravity.CENTER
+        )
+        line.setPadding(0, dpD(3f), 0, dpD(9f))
+        statusView = line
+        body.addView(line)
     }
 
     /**
@@ -260,19 +293,105 @@ class ThreadListPage(
 
     override fun hasNextChunk(): Boolean = page < lastPage
 
-    /** 顶部的「下滑」始终可用：下滑要的就是刷新列表，不跟随页码 */
+    /** 顶部的「下滑」始终可用：第 1 页顶部下滑即刷新，后面的页下滑回上一页 */
     override fun hasPrevChunk(): Boolean = true
     override fun onReachedEnd() = load((page + 1).coerceAtMost(lastPage))
 
     /**
-     * 滑到列表开头：还在后面的页就回上一页；已在第 1 页就什么都不做。
-     *
-     * 这里绝不能接「刷新」——翻看列表时会反复上滑回顶，一接刷新就变成
-     * 「一滑就重新加载、视口跳回第一条」，也正是之前反馈的「下滑就是刷新帖子列表」。
-     * 刷新只走工具栏的刷新按钮 / 页面 refresh()。
+     * 滑到列表开头（第 2 页及以后）：回上一页，既有的分页手感原样保留。
+     * 第 1 页的顶部下滑由 onPullDownRefresh 接成「刷新列表」，
+     * 所以这里不掺刷新逻辑，两者互不干扰。
      */
     override fun onReachedStart() {
         if (page > 1) load(page - 1)
+    }
+
+    /**
+     * 列表已滚到最顶端、手指继续下滑超过 60dp 时被 EinkPager / 普通 ScrollView 回调到这里。
+     *
+     * - 第 1 页：刷新当前板块列表（重拉第 1 页、回到顶部），返回 true 消费手势；
+     * - 第 2 页及以后：返回 false，让原逻辑继续「回上一页」，不破坏分页加载；
+     * - 正在刷新或正在载入：吞掉手势但不重复发请求（防抖）。
+     */
+    override fun onPullDownRefresh(distancePx: Int): Boolean {
+        if (page > 1) return false
+        if (refreshing || loading) return true
+        // 列表空的 / 正停在错误提示上：走整页重载（会显示「载入中…」）
+        if (items.isEmpty() || errorText != null) {
+            refreshList()
+            return true
+        }
+        pullRefresh()
+        return true
+    }
+
+    /**
+     * 顶部下拉刷新：只重拉当前板块第 1 页。
+     * 屏幕上已有的列表保持不动，顶部插一行灰阶状态文字，刷新成功后回到列表最顶部；
+     * 排序 / 过滤（置顶、头像、状态标记等）沿用原有 render() 逻辑，不做任何改动。
+     */
+    private fun pullRefresh() {
+        refreshing = true
+        errorText = null
+        pullState = "正在刷新…"
+        render()
+        invalidatePageCache()
+        val url = HiUrls.threadList(fid, 1)
+        loadHtml(
+            url = url,
+            forceRefresh = true,
+            onHtml = { html ->
+                Async.run(
+                    work = { HiApi.threadListFromHtml(html, url) },
+                    onSuccess = { result ->
+                        refreshing = false
+                        items = result.items
+                        lastPage = result.lastPage.coerceAtLeast(1)
+                        page = result.page.coerceAtLeast(1)
+                        pullState = if (result.items.isEmpty()) "已刷新（这个版块暂时没有新帖）" else "已刷新"
+                        render()
+                        scroller.scrollTo(0, 0)
+                        chrome()
+                        scheduleClearStatus()
+                    },
+                    onError = { t -> pullRefreshFail(t) }
+                )
+            },
+            onFail = { t -> pullRefreshFail(t) }
+        )
+    }
+
+    /** 刷新失败：旧列表保留在屏幕上，只在顶部留一行可重试提示 */
+    private fun pullRefreshFail(t: Throwable) {
+        refreshing = false
+        if (items.isEmpty()) {
+            fail(t)
+            return
+        }
+        val reason = when (t) {
+            is java.net.UnknownHostException -> "（没有网络）"
+            is java.net.SocketTimeoutException -> "（连接超时）"
+            is CfChallengeException -> "（需要先过 Cloudflare 验证）"
+            is NotLoggedInException -> "（登录已失效）"
+            else -> ""
+        }
+        pullState = "刷新失败，下拉重试" + reason
+        render()
+        chrome()
+    }
+
+    /** 「已刷新」只留 1.6 秒：直接移除那一行，无动画、无渐变 */
+    private fun scheduleClearStatus() {
+        val v = statusView ?: return
+        v.postDelayed({
+            val state = pullState
+            if (state != null && state != "正在刷新…" && v.isAttachedToWindow) {
+                pullState = null
+                (v.parent as? ViewGroup)?.removeView(v)
+                if (statusView === v) statusView = null
+                chrome()
+            }
+        }, 1600L)
     }
 
     override fun refresh() = refreshList()

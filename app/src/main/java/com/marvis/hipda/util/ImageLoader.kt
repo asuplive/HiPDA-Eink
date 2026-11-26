@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.os.Handler
 import android.os.Looper
 import android.util.LruCache
+import com.marvis.hipda.data.OfflineStore
 import com.marvis.hipda.net.HiHttp
 import com.marvis.hipda.net.HiUrls
 import java.io.File
@@ -58,15 +59,19 @@ object ImageLoader {
             var bitmap: Bitmap? = null
             try {
                 val file = diskFile(url)
-                val bytes = if (file != null && file.exists() && file.length() > 0) {
-                    file.readBytes()
-                } else {
-                    // 带上站点 Referer：附件图走防盗链时不会被换成一张统一的占位图
-                    val downloaded = HiHttp.bytes(url, referer = HiUrls.baseUrl + "index.php")
-                    if (downloaded != null && downloaded.isNotEmpty() && file != null) {
-                        runCatching { file.writeBytes(downloaded) }
+                // 离线包里存过的图片优先读：出门前缓存过的帖子，断网点开也要有图
+                val offline = OfflineStore.imageFile(url)
+                val bytes = when {
+                    offline != null -> offline.readBytes()
+                    file != null && file.exists() && file.length() > 0 -> file.readBytes()
+                    else -> {
+                        // 带上站点 Referer：附件图走防盗链时不会被换成一张统一的占位图
+                        val downloaded = HiHttp.bytes(url, referer = HiUrls.baseUrl + "index.php")
+                        if (downloaded != null && downloaded.isNotEmpty() && file != null) {
+                            runCatching { file.writeBytes(downloaded) }
+                        }
+                        downloaded
                     }
-                    downloaded
                 }
                 if (bytes != null && bytes.isNotEmpty()) {
                     bitmap = decode(bytes)

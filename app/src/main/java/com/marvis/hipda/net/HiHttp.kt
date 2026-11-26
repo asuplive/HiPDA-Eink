@@ -44,17 +44,22 @@ object HiHttp {
         // 1) 连接池显式放大并保活 5 分钟：连续点开帖子时省掉 TCP + TLS 握手；
         // 2) retryOnConnectionFailure 打开，偶发的连接复用失败直接换连接重试，不再报错给用户；
         // 3) 连接超时从 20s 收到 12s：站点被 Cloudflare 拦或网络不通时能更快落到 WebView 兜底。
-        client = OkHttpClient.Builder()
-            .cookieJar(cookies)
-            .followRedirects(true)
-            .followSslRedirects(true)
-            .retryOnConnectionFailure(true)
-            .connectionPool(okhttp3.ConnectionPool(8, 5, TimeUnit.MINUTES))
-            .connectTimeout(12, TimeUnit.SECONDS)
-            .readTimeout(25, TimeUnit.SECONDS)
-            .writeTimeout(25, TimeUnit.SECONDS)
-            .build()
+        client = buildClient()
     }
+
+    private fun buildClient(): OkHttpClient = OkHttpClient.Builder()
+        .cookieJar(cookies)
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .retryOnConnectionFailure(true)
+        .connectionPool(okhttp3.ConnectionPool(8, 5, TimeUnit.MINUTES))
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .writeTimeout(20, TimeUnit.SECONDS)
+        .build()
+
+    /** 值得隔 300ms 重发一次的瞬时错误码（网关抖动 / 限流），其余状态码如实交给上层 */
+    private val RETRY_CODES = intArrayOf(408, 429, 500, 502, 503, 504)
 
     private fun requireClient(): OkHttpClient = client ?: throw IllegalStateException("HiHttp 未初始化")
 
@@ -178,7 +183,32 @@ object HiHttp {
         }
     }
 
+    /**
+     * 网络抖动兜底：连接被重置、TLS 握手超时、网关 5xx 这类一次性失败，
+     * 隔 300ms 重发一次基本就恢复了，比让用户盯着「加载失败」再手点一次省事。
+     * Cloudflare 挑战与未登录是明确响应，不重试。
+     */
     private fun execute(request: Request, url: String, quiet: Boolean = false): HttpResult {
+        var last: IOException? = null
+        for (attempt in 0..1) {
+            if (attempt > 0) runCatching { Thread.sleep(300L) }
+            try {
+                val r = once(request, url, quiet)
+                if (attempt == 0 && r.code in RETRY_CODES) continue
+                return r
+            } catch (e: CfChallengeException) {
+                throw e
+            } catch (e: NotLoggedInException) {
+                throw e
+            } catch (e: IOException) {
+                last = e
+            }
+        }
+        throw last ?: IOException("网络请求失败")
+    }
+
+    /** 一次性请求：拿到响应立即整包读走，避免连接被占着不放 */
+    private fun once(request: Request, url: String, quiet: Boolean): HttpResult {
         val response = requireClient().newCall(request).execute()
         response.use { r ->
             val bytes = r.body?.bytes() ?: ByteArray(0)

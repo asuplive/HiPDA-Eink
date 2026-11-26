@@ -446,6 +446,133 @@ object HiApi {
     }
 
     // ────────────────────────────────────────────────────────────────
+    // 收藏帖子（Discuz! 7.2 的 my.php?item=favorites）
+    // ────────────────────────────────────────────────────────────────
+
+    /**
+     * 收藏所需的信息。
+     * formhash 从帖子详情页取（登录后每页都有，快速回复表单里就带着）。
+     * addUrl / deleteUrl 是页面里真实的「收藏 / 取消收藏」链接：
+     * 各站模板的地址写法不完全一样，优先照抄站点给的链接，没有才按 7.2 的规则拼。
+     */
+    class FavSpec(
+        val addUrl: String,
+        val deleteUrl: String,
+        val formhash: String,
+        val favorited: Boolean
+    )
+
+    fun favoriteSpec(tid: String): FavSpec {
+        val pageUrl = HiUrls.threadDetail(tid, 1)
+        val r = HiHttp.get(pageUrl, HiUrls.baseUrl)
+        val doc = Jsoup.parse(r.body, r.url)
+        var addUrl = ""
+        var delUrl = ""
+        doc.select("a[href]").forEach { a ->
+            val href = a.attr("href").trim()
+            if (!href.contains("item=favorites")) return@forEach
+            val full = when {
+                href.startsWith("http") -> href
+                href.startsWith("/forum/") -> HiUrls.baseUrl + href.removePrefix("/forum/")
+                href.startsWith("/") -> r.url.substringBefore("/forum/") + href
+                else -> HiUrls.baseUrl + href
+            }
+            if (href.contains("action=delete") || href.contains("op=delete")) {
+                if (delUrl.isBlank()) delUrl = full
+            } else if (href.contains("action=add")) {
+                if (addUrl.isBlank()) addUrl = full
+            }
+        }
+        var formhash = doc.select("input[name=formhash]").attr("value").trim()
+        if (formhash.isBlank()) {
+            formhash = Regex("formhash=([0-9A-Za-z]{8})").find(r.body)?.groupValues?.get(1).orEmpty()
+        }
+        val text = doc.text()
+        val favorited = delUrl.isNotBlank() || text.contains("取消收藏")
+        return FavSpec(addUrl, delUrl, formhash, favorited)
+    }
+
+    /** 收藏本帖 */
+    fun addFavorite(spec: FavSpec, tid: String): com.marvis.hipda.model.PostResult {
+        val pageUrl = HiUrls.threadDetail(tid, 1)
+        var url = spec.addUrl
+        if (url.isBlank()) {
+            if (spec.formhash.isBlank()) {
+                return com.marvis.hipda.model.PostResult(false, "没取到 formhash，请先刷新帖子再试")
+            }
+            url = HiUrls.favoriteAdd(tid, spec.formhash)
+        }
+        return try {
+            val resp = HiHttp.get(url, pageUrl)
+            HiHttp.clearPageCache()
+            val body = resp.body
+            val saidOk = body.contains("收藏成功") || body.contains("favorite_succeed") ||
+                body.contains("succeedhandle_favorite") || body.contains("showDialog")
+            // 站点提示页形态不稳定（inajax 片段 / 跳转页 / 静默成功），必要时回查收藏列表
+            if (saidOk || rereadFavorited(tid)) {
+                com.marvis.hipda.model.PostResult(true, "已收藏本帖")
+            } else {
+                com.marvis.hipda.model.PostResult(false, "收藏没成功：" + tipOf(body))
+            }
+        } catch (e: Exception) {
+            com.marvis.hipda.model.PostResult(false, "收藏失败：" + (e.message ?: "网络异常"))
+        }
+    }
+
+    /** 取消收藏 */
+    fun removeFavorite(spec: FavSpec, tid: String): com.marvis.hipda.model.PostResult {
+        var url = spec.deleteUrl
+        if (url.isBlank()) {
+            if (spec.formhash.isBlank()) {
+                return com.marvis.hipda.model.PostResult(false, "没取到 formhash，请先刷新帖子再试")
+            }
+            url = HiUrls.favoriteDelete(tid, spec.formhash)
+        }
+        return try {
+            val resp = HiHttp.get(url, HiUrls.threadDetail(tid, 1))
+            HiHttp.clearPageCache()
+            val body = resp.body
+            val saidOk = body.contains("删除成功") || body.contains("操作成功") ||
+                body.contains("succeedhandle_favorite") || body.contains("showDialog")
+            if (saidOk || !rereadFavorited(tid)) {
+                com.marvis.hipda.model.PostResult(true, "已取消收藏")
+            } else {
+                com.marvis.hipda.model.PostResult(false, "取消收藏没成功：" + tipOf(body))
+            }
+        } catch (e: Exception) {
+            com.marvis.hipda.model.PostResult(false, "取消收藏失败：" + (e.message ?: "网络异常"))
+        }
+    }
+
+    /**
+     * 站点失败时都给一句人话（提示页 / inajax 片段里）：
+     * 抠出来直接给用户看，比固定的「请稍后重试」有用得多。
+     */
+    private fun tipOf(body: String): String {
+        val patterns = listOf(
+            Regex("id=\"ajaxerror\"[^>]*>(.*?)</", RegexOption.DOT_MATCHES_ALL),
+            Regex("id=\"messagetext\"[^>]*>(.*?)</p>", RegexOption.DOT_MATCHES_ALL),
+            Regex("class=\"alert_error\"[^>]*>(.*?)</div>", RegexOption.DOT_MATCHES_ALL)
+        )
+        for (re in patterns) {
+            val t = re.find(body)?.groupValues?.get(1)
+                ?.replace(Regex("<[^>]+>"), "")?.trim()
+            if (!t.isNullOrBlank()) return t.take(60)
+        }
+        return "站点没有返回成功，请稍后重试"
+    }
+
+    /** 收藏页回查：第一页里看得到该 tid 即视为已收藏 */
+    private fun rereadFavorited(tid: String): Boolean {
+        return try {
+            val r = HiHttp.get(HiUrls.myFavorites(1), HiUrls.baseUrl)
+            Regex("tid=" + Regex.escape(tid) + "(?!\\d)").containsMatchIn(r.body)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────
     // 短消息回复 + 帖子预取
     // ────────────────────────────────────────────────────────────────
 

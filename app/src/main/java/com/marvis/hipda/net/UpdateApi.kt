@@ -50,17 +50,15 @@ object UpdateApi {
         val lanzouCode: String = LANZOU_CODE
     )
 
-    private val client: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .followRedirects(true)
-            .followSslRedirects(true)
-            .retryOnConnectionFailure(true)
-            .connectionPool(okhttp3.ConnectionPool(2, 3, TimeUnit.MINUTES))
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
-            .writeTimeout(15, TimeUnit.SECONDS)
-            .build()
-    }
+    private val client: OkHttpClient = OkHttpClient.Builder()
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .retryOnConnectionFailure(true)
+        .connectionPool(okhttp3.ConnectionPool(2, 3, TimeUnit.MINUTES))
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
+        .build()
 
     /**
      * 同步查询最新 Release。网络失败 / 状态码异常 / 内容不是 JSON 一律抛 IOException，

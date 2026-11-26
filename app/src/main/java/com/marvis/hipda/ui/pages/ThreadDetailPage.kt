@@ -9,6 +9,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
+import com.marvis.hipda.data.OfflineStore
 import com.marvis.hipda.data.Prefs
 import com.marvis.hipda.model.Block
 import com.marvis.hipda.model.PostItem
@@ -38,11 +39,19 @@ class ThreadDetailPage(
     private var page = 1
     private var lastPage = 1
     private var data: PostPage? = null
+    /** 本帖这一页的正文来自离线包时的写入时间；0 表示不是离线内容 */
+    private var offlineAt = 0L
     private var loading = false
     private var errorText: String? = null
     private var needVerify = false
     /** 分批渲染代次：重新载入后旧批次不能再往 body 加视图 */
     private var renderToken = 0
+    /** 收藏请求在飞：连点长按菜单不重复发第二次，避免收藏/取消收藏互相打架 */
+    private var favBusy = false
+    /** 这次载入是「顶部下拉要最新」：联网失败时退回原有正文，别把手里能看的内容刷没 */
+    private var pullRefreshing = false
+    /** 下拉刷新失败的一句话提示，成功则清空 */
+    private var pullFailTip = ""
 
     /**
      * 本帖楼主身份：先取跳转来源带过来的（列表 / 收藏里的作者名与 id），
@@ -73,6 +82,29 @@ class ThreadDetailPage(
 
     private fun load(target: Int, force: Boolean = false) {
         if (loading) return
+        // 离线包优先：出门前缓存过的帖子先拿本地正文秒开，断网也照样能看。
+        // 下拉刷新（force）才联网取最新内容，避免每次点开都白等一次请求。
+        if (!force && pendingFocus.isBlank()) {
+            val cached = OfflineStore.loadPage(tid, target)
+            if (cached != null && cached.posts.isNotEmpty()) {
+                loading = false
+                errorText = null
+                needVerify = false
+                renderToken++
+                data = cached
+                page = cached.page.coerceAtLeast(1)
+                lastPage = cached.lastPage.coerceAtLeast(1)
+                if (cached.opUid.isNotBlank()) opUid = cached.opUid
+                if (cached.opAuthor.isNotBlank()) opAuthor = cached.opAuthor
+                offlineAt = OfflineStore.pageAt(tid, cached.page)
+                pullFailTip = ""
+                focusView = null
+                focusScrolled = false
+                render()
+                return
+            }
+        }
+        offlineAt = 0L
         loading = true
         errorText = null
         needVerify = false
@@ -93,12 +125,19 @@ class ThreadDetailPage(
                     work = { HiApi.threadDetailFromHtml(html, url, tid, opAuthor, opUid) },
                     onSuccess = { result ->
                         loading = false
+                        pullRefreshing = false
+                        pullFailTip = ""
                         data = result
                         // 记住楼主身份：本页若含 1 楼就以它为准，否则保留已有值，供后续翻页继续打「楼主」标签
                         if (result.opUid.isNotBlank()) opUid = result.opUid
                         if (result.opAuthor.isNotBlank()) opAuthor = result.opAuthor
                         page = result.page.coerceAtLeast(1)
                         lastPage = result.lastPage.coerceAtLeast(1)
+                        // 联网读到的正文是否顺手落盘，由设置里「浏览过的帖子自动缓存」决定（默认关）：
+                        // 开着时点开过的帖子越用越全，下次断网进来照样能看；关着就只认手动离线包
+                        if (Prefs.cacheVisitedThreads) {
+                            Async.run(work = { OfflineStore.savePage(result) }, onSuccess = {}, onError = {})
+                        }
                         if (jump) {
                             val hit = result.posts.any { it.postId == pendingFocus }
                             if (hit) pendingFocus = ""
@@ -122,6 +161,22 @@ class ThreadDetailPage(
 
     private fun fail(t: Throwable) {
         loading = false
+        // 下拉刷新没连上：手里已有正文（离线包或上一次在线内容）就别清屏，
+        // 顶部加一行说明即可，断网时照样能接着读
+        if (pullRefreshing && data != null) {
+            pullRefreshing = false
+            pullFailTip = when (t) {
+                is CfChallengeException -> "站点要求 Cloudflare 验证，暂时还是旧内容"
+                is java.net.UnknownHostException -> "无网络，暂时还是旧内容"
+                is java.net.SocketTimeoutException -> "连接超时，暂时还是旧内容"
+                else -> "取最新失败，暂时还是旧内容"
+            }
+            offlineAt = OfflineStore.pageAt(tid, page)
+            clearBody()
+            render()
+            chrome()
+            return
+        }
         needVerify = t is CfChallengeException
         errorText = when (t) {
             is CfChallengeException -> "站点要求 Cloudflare 验证，验证一次即可正常浏览。"
@@ -156,6 +211,23 @@ class ThreadDetailPage(
         // 首屏先上两楼，其余分批补：一页 20 楼时一次性建出所有卡片要几十到上百毫秒，
         // 期间屏幕是空白的。先渲染 2 楼能立刻看到内容，剩余按 3 楼一批补齐。
         val token = ++renderToken
+        // 正文来自离线包：明确标一行，避免用户以为看到的是最新回帖
+        if (offlineAt > 0L) {
+            body.addView(
+                Ui.text(
+                    host,
+                    "离线缓存 · " + OfflineStore.timeText(offlineAt) + "　·　下拉刷新可联网取最新",
+                    Theme.smallSize,
+                    Theme.muted
+                ).apply { setPadding(0, 0, 0, dpD(8f)) }
+            )
+        }
+        if (pullFailTip.isNotBlank()) {
+            body.addView(
+                Ui.text(host, pullFailTip, Theme.smallSize, Theme.muted)
+                    .apply { setPadding(0, 0, 0, dpD(8f)) }
+            )
+        }
         if (focusPid.isNotBlank() && current.posts.any { it.postId == focusPid }) {
             body.addView(
                 Ui.text(host, "已定位到提醒里的那一楼", Theme.smallSize, Theme.muted)
@@ -247,18 +319,80 @@ class ThreadDetailPage(
         )
     }
 
-    /** 长按楼层的菜单：报告 / 回复 / 引用（顺序与站点楼层里的功能按钮一致） */
+    /**
+     * 长按楼层的菜单：报告 / 回复 / 引用（顺序与站点楼层里的功能按钮一致）。
+     * 第 1 楼（楼主）额外多一项「收藏本帖」——收藏是针对整帖的动作，放在首楼最顺手。
+     */
     private fun showPostMenu(post: PostItem) {
-        val items = arrayOf("报告", "回复", "引用")
+        val first = post.floor == 1 || post.op
+        val items = if (first) arrayOf("收藏本帖", "报告", "回复", "引用") else arrayOf("报告", "回复", "引用")
         android.app.AlertDialog.Builder(host)
             .setTitle("第 " + post.floor + " 楼")
             .setItems(items) { _, which ->
-                when (which) {
-                    0 -> openReport(post)
-                    1 -> startReply(post)
+                when {
+                    first && which == 0 -> toggleFavorite()
+                    (!first && which == 0) || (first && which == 1) -> openReport(post)
+                    (!first && which == 1) || (first && which == 2) -> startReply(post)
                     else -> startQuote(post)
                 }
             }
+            .show()
+    }
+
+    /**
+     * 收藏本帖 / 取消收藏：先读一次收藏表单页判断是否已在收藏里，
+     * 已收藏时不直接反着操作，而是明确问一句「要取消吗」，避免误点把老收藏删掉。
+     */
+    private fun toggleFavorite() {
+        if (!Prefs.isLoggedIn()) {
+            host.push(LoginPage(host))
+            return
+        }
+        if (favBusy) return
+        favBusy = true
+        Async.run(
+            work = { HiApi.favoriteSpec(tid) },
+            onSuccess = { spec ->
+                if (spec.favorited) {
+                    favBusy = false
+                    android.app.AlertDialog.Builder(host)
+                        .setTitle("本帖已在收藏里")
+                        .setMessage("要取消收藏吗？")
+                        .setPositiveButton("取消收藏") { _, _ -> applyFavorite(spec, true) }
+                        .setNegativeButton("保留", null)
+                        .show()
+                } else {
+                    applyFavorite(spec, false)
+                }
+            },
+            onError = { t ->
+                favBusy = false
+                favoriteTip("操作失败：" + (t.message ?: "网络异常"))
+            }
+        )
+    }
+
+    private fun applyFavorite(spec: HiApi.FavSpec, cancel: Boolean) {
+        Async.run(
+            work = { if (cancel) HiApi.removeFavorite(spec, tid) else HiApi.addFavorite(spec, tid) },
+            onSuccess = { r ->
+                favBusy = false
+                favoriteTip(r.message)
+            },
+            onError = { t ->
+                favBusy = false
+                favoriteTip("操作失败：" + (t.message ?: "网络异常"))
+            }
+        )
+    }
+
+    /** 收藏结果用应用内对话框提示，不弹系统 Toast（与全站风格一致，E-Ink 下也不闪） */
+    private fun favoriteTip(text: String) {
+        if (host.isFinishing) return
+        android.app.AlertDialog.Builder(host)
+            .setTitle("收藏")
+            .setMessage(text.ifBlank { "已完成" })
+            .setPositiveButton("好", null)
             .show()
     }
 
@@ -624,6 +758,22 @@ class ThreadDetailPage(
     override fun hasPrevChunk(): Boolean = page > 1
     override fun onReachedEnd() = load((page + 1).coerceAtMost(lastPage))
     override fun onReachedStart() = load((page - 1).coerceAtLeast(1))
+
+    /**
+     * 顶部继续下拉 = 联网取最新。
+     *
+     * 帖子打开时走的是离线包秒开（正文顶部那行「离线缓存 · 时间」就是它），
+     * 以前下拉这里没有任何实现，提示写着能下拉却拉不出东西。
+     * 现在下拉超阈值即强制刷新：绕开页面短缓存与离线包，重新请求站点并写回离线包。
+     */
+    override fun onPullDownRefresh(distancePx: Int): Boolean {
+        // 已经在刷新就吞掉手势，避免下拉一次叠出多个请求
+        if (!loading) {
+            pullRefreshing = data != null
+            refresh()
+        }
+        return true
+    }
 
     override fun refresh() {
         load(page, force = true)

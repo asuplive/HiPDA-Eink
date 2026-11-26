@@ -52,6 +52,17 @@ object HiUrls {
     fun myThreads(page: Int): String = page(myThreads, page)
     fun myReplies(page: Int): String = page(myReplies, page)
     fun myFavorites(page: Int): String = page(myFavorites, page)
+
+    /**
+     * 收藏本帖：本站是 Discuz! 7.2，「我的」模块是 my.php（没有 X2/X3 的 home.php spacecp，
+     * 请求 home.php 直接 404）。收藏动作挂在 my.php?item=favorites 上：
+     * action=add 收藏、action=delete 取消，tid 指帖子，formhash 防跨站。
+     */
+    fun favoriteAdd(tid: String, formhash: String): String =
+        baseUrl + "my.php?item=favorites&action=add&tid=" + tid + "&formhash=" + formhash
+
+    fun favoriteDelete(tid: String, formhash: String): String =
+        baseUrl + "my.php?item=favorites&action=delete&tid=" + tid + "&formhash=" + formhash
     fun sms(page: Int): String = page(sms, page)
 
     /**

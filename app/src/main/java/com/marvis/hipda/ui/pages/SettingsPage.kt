@@ -8,6 +8,8 @@ import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import com.marvis.hipda.data.FeedCache
+import com.marvis.hipda.data.OfflineStore
 import com.marvis.hipda.data.Prefs
 import com.marvis.hipda.net.HiHttp
 import com.marvis.hipda.ui.MainActivity
@@ -15,6 +17,7 @@ import com.marvis.hipda.ui.PageKeys
 import com.marvis.hipda.ui.Theme
 import com.marvis.hipda.ui.Ui
 import com.marvis.hipda.ui.dpD
+import com.marvis.hipda.util.OfflineFetcher
 
 /** 设置页：E-Ink 模式开关即在这里 */
 class SettingsPage(host: MainActivity) : ScrollPage(host) {
@@ -132,6 +135,18 @@ class SettingsPage(host: MainActivity) : ScrollPage(host) {
                     "关闭后不再显示该标签，也不留多余间隔。"
             )
         )
+        body.addView(row("浏览过的帖子自动缓存", if (Prefs.cacheVisitedThreads) "开" else "关") {
+            Prefs.cacheVisitedThreads = !Prefs.cacheVisitedThreads
+            render()
+            chrome()
+        })
+        body.addView(
+            hint(
+                "默认关闭。开启后点开过的帖子会把正文顺手存到本机，断网或被拦截时照样能读，越看越全；" +
+                    "关闭后不存新内容，「缓存」里已存的浏览内容可用「清除浏览内容」清掉。" +
+                    "「我的收藏」里主动点的「离线缓存」不受此开关影响。"
+            )
+        )
 
         body.addView(sectionLabel("翻页"))
         body.addView(row("按键翻页", if (Prefs.keyTurn) "开" else "关") {
@@ -206,6 +221,14 @@ class SettingsPage(host: MainActivity) : ScrollPage(host) {
             }
         })
         body.addView(row("清除 Cookie", "执行") { confirmClear() })
+
+        body.addView(sectionLabel("缓存"))
+        body.addView(row("收藏缓存", FeedCache.desc(FeedCache.FAVORITES)) { confirmClearFeedCache() })
+        body.addView(hint("「我的收藏」进页面先显示上次结果再后台刷新；断网或验证被拦时仍可翻看。只存标题等文字，不存网页，清除不影响站点收藏。"))
+        body.addView(row("帖子离线包", OfflineStore.desc()) { confirmClearOffline() })
+        body.addView(hint("在「我的收藏」点「离线缓存」选「缓存正文与图片」后，收藏里每个帖子的正文与图片都会存在本机，断网也能读；这里是它的占用。清除不影响站点收藏。"))
+        body.addView(row("浏览内容", OfflineStore.readDesc()) { confirmClearRead() })
+        body.addView(hint("「浏览过的帖子自动缓存」开着时，点开过的帖子会顺手存一份正文，占用记在这里；去「帖子设置」可关掉该开关。清除只删这部分浏览内容，不影响上面主动缓存的离线包。"))
 
         body.addView(sectionLabel("关于"))
         body.addView(row("版本", com.marvis.hipda.BuildConfig.VERSION_NAME) {})
@@ -303,6 +326,46 @@ class SettingsPage(host: MainActivity) : ScrollPage(host) {
         }
         render()
         chrome()
+    }
+
+    private fun confirmClearFeedCache() {
+        AlertDialog.Builder(host)
+            .setTitle("清除收藏缓存")
+            .setMessage("只清掉本地缓存的收藏列表，不影响站点上已收藏的帖子。")
+            .setPositiveButton("清除") { _, _ ->
+                FeedCache.clear(FeedCache.FAVORITES)
+                render()
+                chrome()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun confirmClearRead() {
+        AlertDialog.Builder(host)
+            .setTitle("清除浏览内容")
+            .setMessage("将删掉浏览时顺手缓存的帖子正文，只影响本机；「我的收藏」里主动缓存的离线包会保留。")
+            .setPositiveButton("清除") { _, _ ->
+                OfflineStore.clearRead()
+                render()
+                chrome()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun confirmClearOffline() {
+        AlertDialog.Builder(host)
+            .setTitle("清除帖子离线包")
+            .setMessage("将删掉本机已缓存的收藏帖子正文与图片，只影响本机离线内容，不影响站点收藏。")
+            .setPositiveButton("清除") { _, _ ->
+                OfflineFetcher.cancel()
+                OfflineStore.clear()
+                render()
+                chrome()
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun confirmClear() {
